@@ -15,11 +15,6 @@ func init() {
 	flag.StringVar(&inFile, "in", "", "input file")
 }
 
-type MetaTag struct {
-	String string
-    Other []byte
-}
-
 func main() {
 	flag.Parse()
 
@@ -30,24 +25,10 @@ func main() {
 	}
 	defer inF.Close()
 
-	st, _ := inF.Stat()
-
-	header := make([]byte, flv.HEADER_LENGTH)
-	_, err = inF.Read(header)
-	if (err != nil) {
+	_, err = flv.ReadHeader(inF)
+	if err != nil {
 		log.Fatal(err)
 	}
-
-	sig := header[0:3]
-	version := header[3:4]
-	skip := header[4:5]
-	offset := header[5:9]
-
-	log.Printf("InFile %s: Size:%d, SIG:'%s', V:%x, S:%x, O:%x\n", inFile, st.Size(), sig, version, skip, offset)
-
-
-	next_id := make([]byte, 4)
-	_, err = inF.Read(next_id)
 
 	for {
 		frame, err := flv.ReadTag(inF)
@@ -88,5 +69,4 @@ func main() {
 	}
 
 }
-
 
