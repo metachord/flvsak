@@ -62,7 +62,7 @@ Example of metadata:
       * {<<"cuePoints">>,[]},
       * {<<"duration">>,6610.312},
       * {<<"hasVideo">>,true},
-      {<<"audiosamplerate">>,2.2e4},
+      * {<<"audiosamplerate">>,2.2e4},
       * {<<"stereo">>,true},
       * {<<"keyframes">>,
          {object,[{times,[0.0,4.0, ...]},
