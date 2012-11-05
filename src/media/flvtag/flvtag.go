@@ -5,6 +5,8 @@ import (
 	"os"
 	"log"
 	"bytes"
+	"time"
+	"math"
 	"github.com/metachord/flv.go/flv"
 	"github.com/metachord/amf.go/amf0"
 )
@@ -30,6 +32,13 @@ func main() {
 	}
 	defer inF.Close()
 
+	fi, err := inF.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	filesize := fi.Size()
+
 	frReader := flv.NewReader(inF)
 
 	_, err = frReader.ReadHeader()
@@ -37,8 +46,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var kfs []kfTimePos
+	var lastKeyFrameTs, lastVTs, lastTs uint32
+	var width, height uint16
+	var videoSize, audioSize, dataSize, metadataSize uint64 = 0, 0, 0, 0
+	var videoFrames, audioFrames uint32 = 0, 0
 
+	var kfs []kfTimePos
 
 nextFrame:
 	for {
@@ -47,14 +60,24 @@ nextFrame:
 			switch frame.(type) {
 			case flv.VideoFrame:
 				tfr := frame.(flv.VideoFrame)
-				log.Printf("VideoCodec: %d, Width: %d, Height: %d", tfr.CodecId, tfr.Width, tfr.Height)
+				width, height = tfr.Width, tfr.Height
+				//log.Printf("VideoCodec: %d, Width: %d, Height: %d", tfr.CodecId, tfr.Width, tfr.Height)
 				switch tfr.Flavor {
 				case flv.KEYFRAME:
+					lastKeyFrameTs = tfr.Dts
 					kfs = append(kfs, kfTimePos{Dts: tfr.Dts, Position: tfr.Position})
+				default:
+					videoFrames++
 				}
+				lastVTs = tfr.Dts
+				lastTs = tfr.Dts
+				videoSize += uint64(tfr.PrevTagSize)
 			case flv.AudioFrame:
 				tfr := frame.(flv.AudioFrame)
-				log.Printf("AudioCodec: %d, Rate: %d, BitSize: %d, Channels: %d", tfr.CodecId, tfr.Rate, tfr.BitSize, tfr.Channels)
+				//log.Printf("AudioCodec: %d, Rate: %d, BitSize: %d, Channels: %d", tfr.CodecId, tfr.Rate, tfr.BitSize, tfr.Channels)
+				lastTs = tfr.Dts
+				audioSize += uint64(tfr.PrevTagSize)
+				audioFrames++
 			case flv.MetaFrame:
 				tfr := frame.(flv.MetaFrame)
 				buf := bytes.NewReader(tfr.Body)
@@ -87,12 +110,28 @@ nextFrame:
 				default:
 					log.Printf("Unknown event: %s\n", evName)
 				}
+				lastTs = tfr.Dts
+				metadataSize += uint64(tfr.PrevTagSize)
 			}
 		}
 		if err != nil {
 			break
 		}
 	}
-	log.Printf("KFS: %v", kfs)
+	//log.Printf("KFS: %v", kfs)
+	lastKeyFrameTsF := float32(lastKeyFrameTs)/1000
+	lastVTsF := float32(lastVTs)/1000
+	duration := float32(lastTs)/1000
+	dataSize = videoSize + audioSize + metadataSize
+
+	now := time.Now()
+	metadatadate := float32(now.Unix() * 1000) + (float32(now.Nanosecond()) / 1000000)
+
+	videoDataRate := float32(videoSize) / float32(videoFrames)
+	audioDataRate := float32(audioSize) / float32(audioFrames)
+
+	frameRate := uint8(math.Floor(float64(videoFrames) / float64(duration)))
+
+	log.Printf("FileSize: %d, LastKeyFrameTS: %f, LastTS: %f, Width: %d, Height: %d, VideoSize: %d, AudioSize: %d, MetaDataSize: %d, DataSize: %d, Duration: %f, MetadataDate: %f, VideoDataRate: %f, AudioDataRate: %f, FrameRate: %d", filesize, lastKeyFrameTsF, lastVTsF, width, height, videoSize, audioSize, metadataSize, dataSize, duration, metadatadate, videoDataRate, audioDataRate, frameRate)
 }
 
