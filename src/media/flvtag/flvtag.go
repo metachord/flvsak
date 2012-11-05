@@ -15,6 +15,11 @@ func init() {
 	flag.StringVar(&inFile, "in", "", "input file")
 }
 
+type kfTimePos struct {
+	Dts uint32
+	Position int64
+}
+
 func main() {
 	flag.Parse()
 
@@ -25,48 +30,69 @@ func main() {
 	}
 	defer inF.Close()
 
-	_, err = flv.ReadHeader(inF)
+	frReader := flv.NewReader(inF)
+
+	_, err = frReader.ReadHeader()
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	var kfs []kfTimePos
+
+
+nextFrame:
 	for {
-		frame, err := flv.ReadTag(inF)
+		frame, err := frReader.ReadFrame()
 		if (frame != nil) {
-			switch frame.Flavor {
-			case flv.KEYFRAME:
-				log.Printf("%d\t%d\n", frame.Dts, frame.Position)
-			case flv.METADATA:
-				buf := bytes.NewReader(frame.Body)
+			switch frame.(type) {
+			case flv.VideoFrame:
+				tfr := frame.(flv.VideoFrame)
+				log.Printf("VideoCodec: %d, Width: %d, Height: %d", tfr.CodecId, tfr.Width, tfr.Height)
+				switch tfr.Flavor {
+				case flv.KEYFRAME:
+					kfs = append(kfs, kfTimePos{Dts: tfr.Dts, Position: tfr.Position})
+				}
+			case flv.AudioFrame:
+				tfr := frame.(flv.AudioFrame)
+				log.Printf("AudioCodec: %d, Rate: %d, BitSize: %d, Channels: %d", tfr.CodecId, tfr.Rate, tfr.BitSize, tfr.Channels)
+			case flv.MetaFrame:
+				tfr := frame.(flv.MetaFrame)
+				buf := bytes.NewReader(tfr.Body)
 				dec := amf0.NewDecoder(buf)
-				objs := []interface{}{}
-				for {
-					got, err := dec.Decode()
+
+				evName, err := dec.Decode()
+				if err != nil {
+					break nextFrame
+				}
+				switch evName {
+				case amf0.StringType("onMetaData"):
+
+					md, err := dec.Decode()
 					if err != nil {
-						break
+						break nextFrame
 					}
-					objs = append(objs, got)
+
+					log.Printf("%d\t%d %v\n", tfr.Dts, tfr.Position, md)
+
+					ea := md.(*amf0.EcmaArrayType)
+					for k, v := range (*ea) {
+						log.Printf("%v = %v\n", k, v)
+					}
+					keyframes := (*ea)["keyframes"].(*amf0.ObjectType)
+
+					times := (*keyframes)["times"]
+					filepositions := (*keyframes)["filepositions"]
+
+					log.Printf("%v %v\n", times, filepositions)
+				default:
+					log.Printf("Unknown event: %s\n", evName)
 				}
-
-				log.Printf("%d\t%d %v\n", frame.Dts, frame.Position, objs[1])
-
-				ea := objs[1].(*amf0.EcmaArrayType)
-				for k, v := range (*ea) {
-					log.Printf("%v = %v\n", k, v)
-				}
-				keyframes := (*ea)["keyframes"].(*amf0.ObjectType)
-
-				times := (*keyframes)["times"]
-				filepositions := (*keyframes)["filepositions"]
-
-				log.Printf("%v %v\n", times, filepositions)
-				return
 			}
 		}
 		if err != nil {
 			break
 		}
 	}
-
+	log.Printf("KFS: %v", kfs)
 }
 
