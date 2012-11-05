@@ -48,6 +48,7 @@ func main() {
 
 	var lastKeyFrameTs, lastVTs, lastTs uint32
 	var width, height uint16
+	var audioRate uint32
 	var videoSize, audioSize, dataSize, metadataSize uint64 = 0, 0, 0, 0
 	var videoFrames, audioFrames uint32 = 0, 0
 
@@ -76,6 +77,7 @@ nextFrame:
 				tfr := frame.(flv.AudioFrame)
 				//log.Printf("AudioCodec: %d, Rate: %d, BitSize: %d, Channels: %d", tfr.CodecId, tfr.Rate, tfr.BitSize, tfr.Channels)
 				lastTs = tfr.Dts
+				audioRate = tfr.Rate
 				audioSize += uint64(tfr.PrevTagSize)
 				audioFrames++
 			case flv.MetaFrame:
@@ -132,6 +134,6 @@ nextFrame:
 
 	frameRate := uint8(math.Floor(float64(videoFrames) / float64(duration)))
 
-	log.Printf("FileSize: %d, LastKeyFrameTS: %f, LastTS: %f, Width: %d, Height: %d, VideoSize: %d, AudioSize: %d, MetaDataSize: %d, DataSize: %d, Duration: %f, MetadataDate: %f, VideoDataRate: %f, AudioDataRate: %f, FrameRate: %d", filesize, lastKeyFrameTsF, lastVTsF, width, height, videoSize, audioSize, metadataSize, dataSize, duration, metadatadate, videoDataRate, audioDataRate, frameRate)
+	log.Printf("FileSize: %d, LastKeyFrameTS: %f, LastTS: %f, Width: %d, Height: %d, VideoSize: %d, AudioSize: %d, MetaDataSize: %d, DataSize: %d, Duration: %f, MetadataDate: %f, VideoDataRate: %f, AudioDataRate: %f, FrameRate: %d, AudioRate: %d", filesize, lastKeyFrameTsF, lastVTsF, width, height, videoSize, audioSize, metadataSize, dataSize, duration, metadatadate, videoDataRate, audioDataRate, frameRate, audioRate)
 }
 
