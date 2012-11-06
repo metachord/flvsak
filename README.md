@@ -72,3 +72,36 @@ Example of metadata:
       * {<<"hasMetadata">>,true}
       ]]
 ```
+
+
+```
+    lastkeyframetimestamp = 6609.44482421875
+    audiodatarate = 48.081443786621094
+    videocodecid = 4
+    audiodelay = 0
+    width = 960
+    metadatacreator = Flvtag https://github.com/metachord/flvtag
+    hasVideo = true
+    audiosize = 4.2513072e+07
+    canSeekToEnd = false
+    duration = 6610.36376953125
+    videosize = 4.14403791e+08
+    hasKeyframes = true
+    filesize = 4.58356236e+08
+    audiosamplesize = 16
+    lasttimestamp = 6610.2451171875
+    metadatadate = {0 1.352184840548653e+12}
+    height = 720
+    framerate = 14
+    keyframes = 0xf840049658
+    stereo = true
+    cuePoints = &[]
+    datasize = 4.56947343e+08
+    audiocodecid = 2
+    hasMetadata = true
+    hasCuePoints = false
+    audiosamplerate = 22050
+    hasAudio = true
+    videodatarate = 500.20001220703125
+
+```
