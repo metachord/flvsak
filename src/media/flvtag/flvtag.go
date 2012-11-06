@@ -49,7 +49,8 @@ func main() {
 	var lastKeyFrameTs, lastVTs, lastTs uint32
 	var width, height uint16
 	var audioRate uint32
-	var videoSize, audioSize, dataSize, metadataSize uint64 = 0, 0, 0, 0
+	var videoFrameSize, audioFrameSize, dataFrameSize, metadataFrameSize uint64 = 0, 0, 0, 0
+	var videoSize, audioSize uint64 = 0, 0
 	var videoFrames, audioFrames uint32 = 0, 0
 
 	var kfs []kfTimePos
@@ -72,13 +73,15 @@ nextFrame:
 				}
 				lastVTs = tfr.Dts
 				lastTs = tfr.Dts
-				videoSize += uint64(tfr.PrevTagSize)
+				videoFrameSize += uint64(tfr.PrevTagSize)
+				videoSize += uint64(len(tfr.Body))
 			case flv.AudioFrame:
 				tfr := frame.(flv.AudioFrame)
 				//log.Printf("AudioCodec: %d, Rate: %d, BitSize: %d, Channels: %d", tfr.CodecId, tfr.Rate, tfr.BitSize, tfr.Channels)
 				lastTs = tfr.Dts
 				audioRate = tfr.Rate
-				audioSize += uint64(tfr.PrevTagSize)
+				audioFrameSize += uint64(tfr.PrevTagSize)
+				audioSize += uint64(len(tfr.Body))
 				audioFrames++
 			case flv.MetaFrame:
 				tfr := frame.(flv.MetaFrame)
@@ -113,7 +116,7 @@ nextFrame:
 					log.Printf("Unknown event: %s\n", evName)
 				}
 				lastTs = tfr.Dts
-				metadataSize += uint64(tfr.PrevTagSize)
+				metadataFrameSize += uint64(tfr.PrevTagSize)
 			}
 		}
 		if err != nil {
@@ -124,16 +127,16 @@ nextFrame:
 	lastKeyFrameTsF := float32(lastKeyFrameTs)/1000
 	lastVTsF := float32(lastVTs)/1000
 	duration := float32(lastTs)/1000
-	dataSize = videoSize + audioSize + metadataSize
+	dataFrameSize = videoFrameSize + audioFrameSize + metadataFrameSize
 
 	now := time.Now()
 	metadatadate := float32(now.Unix() * 1000) + (float32(now.Nanosecond()) / 1000000)
 
-	videoDataRate := float32(videoSize) / float32(videoFrames)
-	audioDataRate := float32(audioSize) / float32(audioFrames)
+	videoDataRate := (float32(videoSize) / float32(duration))*8/1000
+	audioDataRate := (float32(audioSize) / float32(duration))*8/1000
 
 	frameRate := uint8(math.Floor(float64(videoFrames) / float64(duration)))
 
-	log.Printf("FileSize: %d, LastKeyFrameTS: %f, LastTS: %f, Width: %d, Height: %d, VideoSize: %d, AudioSize: %d, MetaDataSize: %d, DataSize: %d, Duration: %f, MetadataDate: %f, VideoDataRate: %f, AudioDataRate: %f, FrameRate: %d, AudioRate: %d", filesize, lastKeyFrameTsF, lastVTsF, width, height, videoSize, audioSize, metadataSize, dataSize, duration, metadatadate, videoDataRate, audioDataRate, frameRate, audioRate)
+	log.Printf("FileSize: %d, LastKeyFrameTS: %f, LastTS: %f, Width: %d, Height: %d, VideoSize: %d, AudioSize: %d, MetaDataSize: %d, DataSize: %d, Duration: %f, MetadataDate: %f, VideoDataRate: %f, AudioDataRate: %f, FrameRate: %d, AudioRate: %d", filesize, lastKeyFrameTsF, lastVTsF, width, height, videoFrameSize, audioFrameSize, metadataFrameSize, dataFrameSize, duration, metadatadate, videoDataRate, audioDataRate, frameRate, audioRate)
 }
 
