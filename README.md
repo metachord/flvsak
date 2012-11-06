@@ -2,6 +2,26 @@
 
 Tool for tagging flv files
 
+
+## Benchmark ##
+
+```
+    $ time flvtag -in in.flv -out out.flv
+
+    real    0m1.803s
+    user    0m0.640s
+    sys     0m1.170s
+
+
+    $ time flvtool2 -U in.flv
+
+    real    8m37.501s
+    user    8m32.050s
+    sys     0m4.900s
+```
+
+## Description ##
+
 Add following values to metadata:
 
  * audiocodecid
