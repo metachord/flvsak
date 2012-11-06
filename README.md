@@ -6,6 +6,9 @@ Tool for tagging flv files
 ## Benchmark ##
 
 ```
+    $ ls -l in.flv
+    -rw-r--r-- 1 root root 398312988 2012-11-06 10:58 in.flv
+
     $ time flvtag -in in.flv -out out.flv
 
     real    0m1.803s
