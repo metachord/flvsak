@@ -122,14 +122,21 @@ nextFrame:
 					if err != nil {
 						break nextFrame
 					}
-
 					//log.Printf("%d\t%d %v\n", tfr.Dts, tfr.Position, md)
-
-					ea := md.(*amf0.EcmaArrayType)
 					log.Printf("Old onMetaData")
-					for k, v := range (*ea) {
-						log.Printf("%v = %v\n", k, v)
+					switch md.(type) {
+					case *amf0.EcmaArrayType:
+						ea := md.(*amf0.EcmaArrayType)
+						for k, v := range (*ea) {
+							log.Printf("%v = %v\n", k, v)
+						}
+					case *amf0.ObjectType:
+						ea := md.(*amf0.ObjectType)
+						for k, v := range (*ea) {
+							log.Printf("%v = %v\n", k, v)
+						}
 					}
+
 					//keyframes := (*ea)["keyframes"].(*amf0.ObjectType)
 
 					//times := (*keyframes)["times"]
