@@ -71,8 +71,10 @@ nextFrame:
 			switch frame.(type) {
 			case flv.VideoFrame:
 				tfr := frame.(flv.VideoFrame)
-				width, height = tfr.Width, tfr.Height
-				//log.Printf("VideoCodec: %d, Width: %d, Height: %d", tfr.CodecId, tfr.Width, tfr.Height)
+				if (width == 0) || (height == 0) {
+					width, height = tfr.Width, tfr.Height
+					//log.Printf("VideoCodec: %d, Width: %d, Height: %d", tfr.CodecId, tfr.Width, tfr.Height)
+				}
 				switch tfr.Flavor {
 				case flv.KEYFRAME:
 					lastKeyFrameTs = tfr.Dts
@@ -122,7 +124,7 @@ nextFrame:
 					if err != nil {
 						break nextFrame
 					}
-					//log.Printf("%d\t%d %v\n", tfr.Dts, tfr.Position, md)
+
 					log.Printf("Old onMetaData")
 					switch md.(type) {
 					case *amf0.EcmaArrayType:
@@ -130,19 +132,16 @@ nextFrame:
 						for k, v := range (*ea) {
 							log.Printf("%v = %v\n", k, v)
 						}
+						if width == 0 {width = uint16((*ea)["width"].(amf0.NumberType))}
+						if height == 0 {height = uint16((*ea)["height"].(amf0.NumberType))}
 					case *amf0.ObjectType:
 						ea := md.(*amf0.ObjectType)
 						for k, v := range (*ea) {
 							log.Printf("%v = %v\n", k, v)
 						}
+						if width == 0 {width = uint16((*ea)["width"].(amf0.NumberType))}
+						if height == 0 {height = uint16((*ea)["height"].(amf0.NumberType))}
 					}
-
-					//keyframes := (*ea)["keyframes"].(*amf0.ObjectType)
-
-					//times := (*keyframes)["times"]
-					//filepositions := (*keyframes)["filepositions"]
-
-					//log.Printf("%v %v\n", times, filepositions)
 				default:
 					log.Printf("Unknown event: %s\n", evName)
 				}
