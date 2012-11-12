@@ -126,22 +126,19 @@ nextFrame:
 					}
 
 					log.Printf("Old onMetaData")
-					switch md.(type) {
+					var ea map[amf0.StringType]interface{}
+					switch md := md.(type) {
 					case *amf0.EcmaArrayType:
-						ea := md.(*amf0.EcmaArrayType)
-						for k, v := range (*ea) {
-							log.Printf("%v = %v\n", k, v)
-						}
-						if width == 0 {width = uint16((*ea)["width"].(amf0.NumberType))}
-						if height == 0 {height = uint16((*ea)["height"].(amf0.NumberType))}
+						ea = *md
 					case *amf0.ObjectType:
-						ea := md.(*amf0.ObjectType)
-						for k, v := range (*ea) {
-							log.Printf("%v = %v\n", k, v)
-						}
-						if width == 0 {width = uint16((*ea)["width"].(amf0.NumberType))}
-						if height == 0 {height = uint16((*ea)["height"].(amf0.NumberType))}
+						ea = *md
 					}
+					for k, v := range ea {
+						log.Printf("%v = %v\n", k, v)
+					}
+					if width == 0 {width = uint16(((ea)["width"]).(amf0.NumberType))}
+					if height == 0 {height = uint16(((ea)["height"]).(amf0.NumberType))}
+
 				default:
 					log.Printf("Unknown event: %s\n", evName)
 				}
