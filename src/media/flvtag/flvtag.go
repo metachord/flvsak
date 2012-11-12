@@ -269,14 +269,15 @@ nextFrame:
 
 	frWriter.WriteHeader(header)
 
+	cFrame := flv.CFrame{
+		Stream: 0,
+		Dts: 0,
+		Type: flv.TAG_TYPE_META,
+		Flavor: flv.METADATA,
+		Body: newBuf.Bytes(),
+	}
 	newMdFrame := flv.MetaFrame {
-		flv.CFrame{
-			Stream: 0,
-			Dts: 0,
-			Type: flv.TAG_TYPE_META,
-			Flavor: flv.METADATA,
-			Body: newBuf.Bytes(),
-		},
+		CFrame: cFrame,
 	}
 
 	frWriter.WriteFrame(newMdFrame)
