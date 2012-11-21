@@ -85,6 +85,7 @@ nextFrame:
 				}
 				hasVideo = true
 				lastVTs = tfr.Dts
+				checkTs(lastTs, tfr.Dts)
 				lastTs = tfr.Dts
 				videoCodec = uint8(tfr.CodecId)
 				videoFrameSize += uint64(tfr.PrevTagSize)
@@ -92,6 +93,7 @@ nextFrame:
 			case flv.AudioFrame:
 				tfr := frame.(flv.AudioFrame)
 				//log.Printf("AudioCodec: %d, Rate: %d, BitSize: %d, Channels: %d", tfr.CodecId, tfr.Rate, tfr.BitSize, tfr.Channels)
+				checkTs(lastTs, tfr.Dts)
 				lastTs = tfr.Dts
 				audioRate = tfr.Rate
 				audioFrameSize += uint64(tfr.PrevTagSize)
@@ -143,6 +145,7 @@ nextFrame:
 					log.Printf("Unknown event: %s\n", evName)
 				}
 				hasMetadata = true
+				checkTs(lastTs, tfr.Dts)
 				lastTs = tfr.Dts
 				metadataFrameSize += uint64(tfr.PrevTagSize)
 			}
@@ -316,3 +319,8 @@ nextFrame:
 
 }
 
+func checkTs(lastTs, currTs uint32) {
+	if lastTs > currTs {
+		log.Printf("WARN: non monotonically increasing dts: %d > %d", lastTs, currTs)
+	}
+}
