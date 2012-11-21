@@ -13,10 +13,12 @@ import (
 
 var inFile string
 var outFile string
+var fixDts bool
 
 func init() {
 	flag.StringVar(&inFile, "in", "", "input file")
 	flag.StringVar(&outFile, "out", "", "output file")
+	flag.BoolVar(&fixDts, "fix-dts", false, "fix non monotonically dts")
 }
 
 type kfTimePos struct {
@@ -48,7 +50,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var lastKeyFrameTs, lastVTs, lastATs, lastTs uint32
+	var lastKeyFrameTs, lastVTs, lastATs, lastMTs, lastTs uint32
 	var width, height uint16
 	var audioRate uint32
 	var videoFrameSize, audioFrameSize, dataFrameSize, metadataFrameSize uint64 = 0, 0, 0, 0
@@ -83,7 +85,6 @@ nextFrame:
 					videoFrames++
 				}
 				hasVideo = true
-				checkTs(lastVTs, tfr.Dts)
 				lastVTs = tfr.Dts
 				lastTs = tfr.Dts
 				videoCodec = uint8(tfr.CodecId)
@@ -92,7 +93,6 @@ nextFrame:
 			case flv.AudioFrame:
 				tfr := frame.(flv.AudioFrame)
 				//log.Printf("AudioCodec: %d, Rate: %d, BitSize: %d, Channels: %d", tfr.CodecId, tfr.Rate, tfr.BitSize, tfr.Channels)
-				checkTs(lastATs, tfr.Dts)
 				lastATs = tfr.Dts
 				lastTs = tfr.Dts
 				audioRate = tfr.Rate
@@ -290,22 +290,57 @@ nextFrame:
 	inStart := kfs[0].Position
 	inF.Seek(inStart, os.SEEK_SET)
 
+	lastVTs, lastATs, lastMTs = 0, 0, 0
+	var lastVTsDiff, lastATsDiff, lastMTsDiff uint32 = 0, 0, 0
+	var shiftVTs, shiftATs, shiftMTs uint32 = 0, 0, 0
+
 	for {
 		rframe, err := frReader.ReadFrame()
 		if err != nil {
 			log.Fatal(err)
 		}
 		if (rframe != nil) {
-			var f flv.Frame
-			switch md := rframe.(type) {
+			switch rframe.(type) {
 			case flv.VideoFrame:
-				f = md
+				f := rframe.(flv.VideoFrame)
+				if lastVTs > f.Dts {
+					warnTs(lastVTs, f.Dts)
+					if fixDts {
+						newDts := lastVTs + lastVTsDiff
+						shiftVTs = newDts - f.Dts
+						f.Dts += shiftVTs
+					}
+				}
+				lastVTsDiff = f.Dts - lastVTs
+				lastVTs = f.Dts
+				err = frWriter.WriteFrame(f)
 			case flv.AudioFrame:
-				f = md
+				f := rframe.(flv.AudioFrame)
+				if lastATs > f.Dts {
+					warnTs(lastATs, f.Dts)
+					if fixDts {
+						newDts := lastATs + lastATsDiff
+						shiftATs = newDts - f.Dts
+						f.Dts += shiftATs
+					}
+				}
+				lastATsDiff = f.Dts - lastATs
+				lastATs = f.Dts
+				err = frWriter.WriteFrame(f)
 			case flv.MetaFrame:
-				f = md
+				f := rframe.(flv.MetaFrame)
+				if lastMTs > f.Dts {
+					warnTs(lastMTs, f.Dts)
+					if fixDts {
+						newDts := lastMTs + lastMTsDiff
+						shiftMTs = newDts - f.Dts
+						f.Dts += shiftMTs
+					}
+				}
+				lastMTsDiff = f.Dts - lastMTs
+				lastMTs = f.Dts
+				err = frWriter.WriteFrame(f)
 			}
-			err = frWriter.WriteFrame(f)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -318,8 +353,6 @@ nextFrame:
 	outF.Close()
 }
 
-func checkTs(lastTs, currTs uint32) {
-	if lastTs > currTs {
-		log.Printf("WARN: non monotonically increasing dts: %d > %d", lastTs, currTs)
-	}
+func warnTs(lastTs, currTs uint32) {
+	log.Printf("WARN: non monotonically increasing dts: %d > %d", lastTs, currTs)
 }
