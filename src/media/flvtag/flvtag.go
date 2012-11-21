@@ -49,7 +49,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var lastKeyFrameTs, lastVTs, lastTs uint32
+	var lastKeyFrameTs, lastVTs, lastATs, lastTs uint32
 	var width, height uint16
 	var audioRate uint32
 	var videoFrameSize, audioFrameSize, dataFrameSize, metadataFrameSize uint64 = 0, 0, 0, 0
@@ -84,8 +84,8 @@ nextFrame:
 					videoFrames++
 				}
 				hasVideo = true
+				checkTs(lastVTs, tfr.Dts)
 				lastVTs = tfr.Dts
-				checkTs(lastTs, tfr.Dts)
 				lastTs = tfr.Dts
 				videoCodec = uint8(tfr.CodecId)
 				videoFrameSize += uint64(tfr.PrevTagSize)
@@ -93,7 +93,8 @@ nextFrame:
 			case flv.AudioFrame:
 				tfr := frame.(flv.AudioFrame)
 				//log.Printf("AudioCodec: %d, Rate: %d, BitSize: %d, Channels: %d", tfr.CodecId, tfr.Rate, tfr.BitSize, tfr.Channels)
-				checkTs(lastTs, tfr.Dts)
+				checkTs(lastATs, tfr.Dts)
+				lastATs = tfr.Dts
 				lastTs = tfr.Dts
 				audioRate = tfr.Rate
 				audioFrameSize += uint64(tfr.PrevTagSize)
@@ -145,7 +146,6 @@ nextFrame:
 					log.Printf("Unknown event: %s\n", evName)
 				}
 				hasMetadata = true
-				checkTs(lastTs, tfr.Dts)
 				lastTs = tfr.Dts
 				metadataFrameSize += uint64(tfr.PrevTagSize)
 			}
