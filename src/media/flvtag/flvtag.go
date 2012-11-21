@@ -5,7 +5,6 @@ import (
 	"os"
 	"log"
 	"bytes"
-	"io"
 	"time"
 	"math"
 	"github.com/metachord/flv.go/flv"
@@ -291,32 +290,32 @@ nextFrame:
 	inStart := kfs[0].Position
 	inF.Seek(inStart, os.SEEK_SET)
 
-	bufn := 4096
-	tmpbuf := make([]byte, bufn)
 	for {
-		rn, err := inF.Read(tmpbuf)
-		if (err != nil) && (err != io.EOF) {
-				log.Fatal(err)
-		}
-		if (rn != bufn) && ((err != nil) && (err != io.EOF)) {
-			log.Fatal("cannot read bufn bytes")
-		}
-
-		wn, err := outF.Write(tmpbuf[:rn])
+		rframe, err := frReader.ReadFrame()
 		if err != nil {
 			log.Fatal(err)
 		}
-		if wn != bufn {
+		if (rframe != nil) {
+			var f flv.Frame
+			switch md := rframe.(type) {
+			case flv.VideoFrame:
+				f = md
+			case flv.AudioFrame:
+				f = md
+			case flv.MetaFrame:
+				f = md
+			}
+			err = frWriter.WriteFrame(f)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
 			break
 		}
 	}
 
-
 	inF.Close()
 	outF.Close()
-
-
-
 }
 
 func checkTs(lastTs, currTs uint32) {
