@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"flag"
 	"os"
 	"log"
@@ -13,12 +14,35 @@ import (
 
 var inFile string
 var outFile string
+var updateKeyframes bool
+
+var splitContent bool
+
+var videoOutFile string
+var audioOutFile string
+var metaOutFile string
+
 var fixDts bool
 
 func init() {
+
 	flag.StringVar(&inFile, "in", "", "input file")
 	flag.StringVar(&outFile, "out", "", "output file")
+
+	flag.BoolVar(&updateKeyframes, "update-keyframes", false, "update keyframes positions in metatag")
+
+	flag.BoolVar(&splitContent, "split-content", false, "split content to different files")
+	flag.StringVar(&videoOutFile, "out-video", "", "output video file")
+	flag.StringVar(&audioOutFile, "out-audio", "", "output audio file")
+	flag.StringVar(&metaOutFile, "out-meta", "", "output meta file")
+
 	flag.BoolVar(&fixDts, "fix-dts", false, "fix non monotonically dts")
+}
+
+func usage() {
+	fmt.Fprintf(os.Stderr, "usage: %s -in in_file.flv [-update-keyframes -out out_file.flv] [-fix-dts] [-split-content [-out-video out_video.flv] [-out-audio out_audio.flv] [-out-meta out_meta.flv]]\n", os.Args[0])
+	flag.PrintDefaults()
+	os.Exit(2)
 }
 
 type kfTimePos struct {
@@ -27,21 +51,18 @@ type kfTimePos struct {
 }
 
 func main() {
+	flag.Usage = usage
 	flag.Parse()
 
-	log.Printf("Read from %s, write to %s\n", inFile, outFile)
+	if inFile == "" {
+		log.Fatal("No input file")
+	}
+
 	inF, err := os.Open(inFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer inF.Close()
-
-	fi, err := inF.Stat()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	filesize := fi.Size()
 
 	frReader := flv.NewReader(inF)
 
@@ -50,7 +71,155 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var lastKeyFrameTs, lastVTs, lastATs, lastMTs, lastTs uint32
+
+	if updateKeyframes {
+		if outFile == "" {
+			log.Fatal("No output file")
+		}
+
+		outF, err := os.Create(outFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer outF.Close()
+
+		frWriter := flv.NewWriter(outF)
+		frWriter.WriteHeader(header)
+
+		inStart := writeMetaKeyframes(frReader, frWriter)
+		inF.Seek(inStart, os.SEEK_SET)
+
+		frW := make(map[string]*flv.FlvWriter)
+		frW["video"] = frWriter
+		frW["audio"] = frWriter
+		frW["meta"] = frWriter
+
+		writeFrames(frReader, frW)
+	} else if splitContent {
+		if videoOutFile == "" && audioOutFile == "" && metaOutFile == "" {
+			log.Fatal("No any split output file")
+		}
+
+		type splitWriter struct {
+			FileName string
+			Writer *flv.FlvWriter
+		}
+
+		frFW := make(map[string]*splitWriter)
+		frFW["video"] = &splitWriter{FileName: videoOutFile, Writer: nil}
+		frFW["audio"] = &splitWriter{FileName: audioOutFile, Writer: nil}
+		frFW["meta"] = &splitWriter{FileName: metaOutFile, Writer: nil}
+
+		frW := make(map[string]*flv.FlvWriter)
+
+		for k, _ := range frFW {
+			var of string
+			switch k {
+			case "video": of = videoOutFile
+			case "audio": of = audioOutFile
+			case "meta": of = metaOutFile
+			}
+
+			for wk, wv := range frFW {
+				if wv.FileName == of {
+					if wv.Writer != nil {
+						log.Printf("Write %s to existing %s file %s", k, wk, of)
+						frW[k] = wv.Writer
+						break
+					} else {
+						outF, err := os.Create(of)
+						if err != nil {
+							log.Fatal(err)
+						}
+						//defer outF.Close()
+						log.Printf("Write %s to %s", k, of)
+						frFW[k].Writer = flv.NewWriter(outF)
+						frFW[k].Writer.WriteHeader(header)
+						frW[k] = frFW[k].Writer
+						break
+					}
+				}
+			}
+		}
+		writeFrames(frReader, frW)
+	}
+}
+
+func warnTs(lastTs, currTs uint32) {
+	log.Printf("WARN: non monotonically increasing dts: %d > %d", lastTs, currTs)
+}
+
+func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
+	var lastVTs, lastATs, lastMTs uint32 = 0, 0, 0
+	var lastVTsDiff, lastATsDiff, lastMTsDiff uint32 = 0, 0, 0
+	var shiftVTs, shiftATs, shiftMTs uint32 = 0, 0, 0
+
+	for {
+		rframe, err := frReader.ReadFrame()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if (rframe != nil) {
+			switch rframe.(type) {
+			case flv.VideoFrame:
+				f := rframe.(flv.VideoFrame)
+				if lastVTs > f.Dts {
+					warnTs(lastVTs, f.Dts)
+					if fixDts {
+						newDts := lastVTs + lastVTsDiff
+						shiftVTs = newDts - f.Dts
+						f.Dts += shiftVTs
+					}
+				}
+				lastVTsDiff = f.Dts - lastVTs
+				lastVTs = f.Dts
+				err = frW["video"].WriteFrame(f)
+			case flv.AudioFrame:
+				f := rframe.(flv.AudioFrame)
+				if lastATs > f.Dts {
+					warnTs(lastATs, f.Dts)
+					if fixDts {
+						newDts := lastATs + lastATsDiff
+						shiftATs = newDts - f.Dts
+						f.Dts += shiftATs
+					}
+				}
+				lastATsDiff = f.Dts - lastATs
+				lastATs = f.Dts
+				err = frW["audio"].WriteFrame(f)
+			case flv.MetaFrame:
+				f := rframe.(flv.MetaFrame)
+				if lastMTs > f.Dts {
+					warnTs(lastMTs, f.Dts)
+					if fixDts {
+						newDts := lastMTs + lastMTsDiff
+						shiftMTs = newDts - f.Dts
+						f.Dts += shiftMTs
+					}
+				}
+				lastMTsDiff = f.Dts - lastMTs
+				lastMTs = f.Dts
+				err = frW["meta"].WriteFrame(f)
+			}
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			break
+		}
+	}
+}
+
+func writeMetaKeyframes(frReader *flv.FlvReader, frWriter *flv.FlvWriter) (inStart int64) {
+
+	fi, err := frReader.InFile.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	filesize := fi.Size()
+
+	var lastKeyFrameTs, lastVTs, lastTs uint32
 	var width, height uint16
 	var audioRate uint32
 	var videoFrameSize, audioFrameSize, dataFrameSize, metadataFrameSize uint64 = 0, 0, 0, 0
@@ -93,7 +262,7 @@ nextFrame:
 			case flv.AudioFrame:
 				tfr := frame.(flv.AudioFrame)
 				//log.Printf("AudioCodec: %d, Rate: %d, BitSize: %d, Channels: %d", tfr.CodecId, tfr.Rate, tfr.BitSize, tfr.Channels)
-				lastATs = tfr.Dts
+				//lastATs = tfr.Dts
 				lastTs = tfr.Dts
 				audioRate = tfr.Rate
 				audioFrameSize += uint64(tfr.PrevTagSize)
@@ -261,16 +430,6 @@ nextFrame:
 
 
 
-	outF, err := os.Create(outFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer outF.Close()
-
-	frWriter := flv.NewWriter(outF)
-
-	frWriter.WriteHeader(header)
-
 	cFrame := flv.CFrame{
 		Stream: 0,
 		Dts: 0,
@@ -287,72 +446,6 @@ nextFrame:
 
 	//log.Printf("NewMetaData: %v", newBuf)
 
-	inStart := kfs[0].Position
-	inF.Seek(inStart, os.SEEK_SET)
-
-	lastVTs, lastATs, lastMTs = 0, 0, 0
-	var lastVTsDiff, lastATsDiff, lastMTsDiff uint32 = 0, 0, 0
-	var shiftVTs, shiftATs, shiftMTs uint32 = 0, 0, 0
-
-	for {
-		rframe, err := frReader.ReadFrame()
-		if err != nil {
-			log.Fatal(err)
-		}
-		if (rframe != nil) {
-			switch rframe.(type) {
-			case flv.VideoFrame:
-				f := rframe.(flv.VideoFrame)
-				if lastVTs > f.Dts {
-					warnTs(lastVTs, f.Dts)
-					if fixDts {
-						newDts := lastVTs + lastVTsDiff
-						shiftVTs = newDts - f.Dts
-						f.Dts += shiftVTs
-					}
-				}
-				lastVTsDiff = f.Dts - lastVTs
-				lastVTs = f.Dts
-				err = frWriter.WriteFrame(f)
-			case flv.AudioFrame:
-				f := rframe.(flv.AudioFrame)
-				if lastATs > f.Dts {
-					warnTs(lastATs, f.Dts)
-					if fixDts {
-						newDts := lastATs + lastATsDiff
-						shiftATs = newDts - f.Dts
-						f.Dts += shiftATs
-					}
-				}
-				lastATsDiff = f.Dts - lastATs
-				lastATs = f.Dts
-				err = frWriter.WriteFrame(f)
-			case flv.MetaFrame:
-				f := rframe.(flv.MetaFrame)
-				if lastMTs > f.Dts {
-					warnTs(lastMTs, f.Dts)
-					if fixDts {
-						newDts := lastMTs + lastMTsDiff
-						shiftMTs = newDts - f.Dts
-						f.Dts += shiftMTs
-					}
-				}
-				lastMTsDiff = f.Dts - lastMTs
-				lastMTs = f.Dts
-				err = frWriter.WriteFrame(f)
-			}
-			if err != nil {
-				log.Fatal(err)
-			}
-		} else {
-			break
-		}
-	}
-
-	inF.Close()
-	outF.Close()
-}
-
-func warnTs(lastTs, currTs uint32) {
-	log.Printf("WARN: non monotonically increasing dts: %d > %d", lastTs, currTs)
+	inStart = kfs[0].Position
+	return inStart
 }
