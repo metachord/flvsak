@@ -1,15 +1,15 @@
 package main
 
 import (
-	"fmt"
-	"flag"
-	"os"
-	"log"
 	"bytes"
-	"time"
-	"math"
-	"github.com/metachord/flv.go/flv"
+	"flag"
+	"fmt"
 	"github.com/metachord/amf.go/amf0"
+	"github.com/metachord/flv.go/flv"
+	"log"
+	"math"
+	"os"
+	"time"
 )
 
 var inFile string
@@ -46,7 +46,7 @@ func usage() {
 }
 
 type kfTimePos struct {
-	Dts uint32
+	Dts      uint32
 	Position int64
 }
 
@@ -70,7 +70,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 
 	if updateKeyframes {
 		if outFile == "" {
@@ -102,7 +101,7 @@ func main() {
 
 		type splitWriter struct {
 			FileName string
-			Writer *flv.FlvWriter
+			Writer   *flv.FlvWriter
 		}
 
 		frFW := make(map[string]*splitWriter)
@@ -115,9 +114,12 @@ func main() {
 		for k, _ := range frFW {
 			var of string
 			switch k {
-			case "video": of = videoOutFile
-			case "audio": of = audioOutFile
-			case "meta": of = metaOutFile
+			case "video":
+				of = videoOutFile
+			case "audio":
+				of = audioOutFile
+			case "meta":
+				of = metaOutFile
 			}
 
 			for wk, wv := range frFW {
@@ -161,7 +163,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		if (rframe != nil) {
+		if rframe != nil {
 			switch rframe.(type) {
 			case flv.VideoFrame:
 				f := rframe.(flv.VideoFrame)
@@ -239,7 +241,7 @@ func writeMetaKeyframes(frReader *flv.FlvReader, frWriter *flv.FlvWriter) (inSta
 nextFrame:
 	for {
 		frame, err := frReader.ReadFrame()
-		if (frame != nil) {
+		if frame != nil {
 			switch frame.(type) {
 			case flv.VideoFrame:
 				tfr := frame.(flv.VideoFrame)
@@ -309,8 +311,12 @@ nextFrame:
 					for k, v := range ea {
 						log.Printf("%v = %v\n", k, v)
 					}
-					if width == 0 {width = uint16(((ea)["width"]).(amf0.NumberType))}
-					if height == 0 {height = uint16(((ea)["height"]).(amf0.NumberType))}
+					if width == 0 {
+						width = uint16(((ea)["width"]).(amf0.NumberType))
+					}
+					if height == 0 {
+						height = uint16(((ea)["height"]).(amf0.NumberType))
+					}
 
 				default:
 					log.Printf("Unknown event: %s\n", evName)
@@ -327,16 +333,16 @@ nextFrame:
 		}
 	}
 	//log.Printf("KFS: %v", kfs)
-	lastKeyFrameTsF := float32(lastKeyFrameTs)/1000
-	lastVTsF := float32(lastVTs)/1000
-	duration := float32(lastTs)/1000
+	lastKeyFrameTsF := float32(lastKeyFrameTs) / 1000
+	lastVTsF := float32(lastVTs) / 1000
+	duration := float32(lastTs) / 1000
 	dataFrameSize = videoFrameSize + audioFrameSize + metadataFrameSize
 
 	now := time.Now()
-	metadatadate := float64(now.Unix() * 1000) + (float64(now.Nanosecond()) / 1000000)
+	metadatadate := float64(now.Unix()*1000) + (float64(now.Nanosecond()) / 1000000)
 
-	videoDataRate := (float32(videoSize) / float32(duration))*8/1000
-	audioDataRate := (float32(audioSize) / float32(duration))*8/1000
+	videoDataRate := (float32(videoSize) / float32(duration)) * 8 / 1000
+	audioDataRate := (float32(audioSize) / float32(duration)) * 8 / 1000
 
 	frameRate := uint8(math.Floor(float64(videoFrames) / float64(duration)))
 
@@ -345,54 +351,54 @@ nextFrame:
 	kfTimes := make(amf0.StrictArrayType, 0)
 	kfPositions := make(amf0.StrictArrayType, 0)
 
-	for i := range(kfs) {
-		kfTimes = append(kfTimes, amf0.NumberType((float64(kfs[i].Dts)/1000)))
+	for i := range kfs {
+		kfTimes = append(kfTimes, amf0.NumberType((float64(kfs[i].Dts) / 1000)))
 		kfPositions = append(kfTimes, amf0.NumberType(kfs[i].Position))
 	}
 
 	keyFrames := amf0.ObjectType{
-		"times": &kfTimes,
+		"times":         &kfTimes,
 		"filepositions": &kfPositions,
 	}
 
-	metaMap := amf0.EcmaArrayType {
+	metaMap := amf0.EcmaArrayType{
 		"metadatacreator": amf0.StringType("Flvtag https://github.com/metachord/flvtag"),
-		"metadatadate": amf0.DateType{TimeZone: 0, Date: metadatadate},
+		"metadatadate":    amf0.DateType{TimeZone: 0, Date: metadatadate},
 
 		"keyframes": &keyFrames,
 
-		"hasVideo": amf0.BooleanType(hasVideo),
-		"hasAudio": amf0.BooleanType(hasAudio),
-		"hasMetadata": amf0.BooleanType(hasMetadata),
+		"hasVideo":     amf0.BooleanType(hasVideo),
+		"hasAudio":     amf0.BooleanType(hasAudio),
+		"hasMetadata":  amf0.BooleanType(hasMetadata),
 		"hasKeyframes": amf0.BooleanType(hasKeyframes),
 		"hasCuePoints": amf0.BooleanType(false),
 
-		"videocodecid": amf0.NumberType(videoCodec),
-		"width": amf0.NumberType(width),
-		"height": amf0.NumberType(height),
-		"videosize": amf0.NumberType(videoFrameSize),
-		"framerate": amf0.NumberType(frameRate),
+		"videocodecid":  amf0.NumberType(videoCodec),
+		"width":         amf0.NumberType(width),
+		"height":        amf0.NumberType(height),
+		"videosize":     amf0.NumberType(videoFrameSize),
+		"framerate":     amf0.NumberType(frameRate),
 		"videodatarate": amf0.NumberType(videoDataRate),
 
-		"audiocodecid": amf0.NumberType(audioCodec),
-		"stereo": amf0.BooleanType(stereo),
+		"audiocodecid":    amf0.NumberType(audioCodec),
+		"stereo":          amf0.BooleanType(stereo),
 		"audiosamplesize": amf0.NumberType(audioSampleSize),
-		"audiodelay": amf0.NumberType(0),
-		"audiodatarate": amf0.NumberType(audioDataRate),
-		"audiosize": amf0.NumberType(audioFrameSize),
+		"audiodelay":      amf0.NumberType(0),
+		"audiodatarate":   amf0.NumberType(audioDataRate),
+		"audiosize":       amf0.NumberType(audioFrameSize),
 		"audiosamplerate": amf0.NumberType(audioRate),
 
-		"filesize": amf0.NumberType(filesize),
-		"datasize": amf0.NumberType(dataFrameSize),
-		"lasttimestamp": amf0.NumberType(lastVTsF),
+		"filesize":              amf0.NumberType(filesize),
+		"datasize":              amf0.NumberType(dataFrameSize),
+		"lasttimestamp":         amf0.NumberType(lastVTsF),
 		"lastkeyframetimestamp": amf0.NumberType(lastKeyFrameTsF),
-		"cuePoints": &amf0.StrictArrayType{},
-		"duration": amf0.NumberType(duration),
-		"canSeekToEnd": amf0.BooleanType(false),
+		"cuePoints":             &amf0.StrictArrayType{},
+		"duration":              amf0.NumberType(duration),
+		"canSeekToEnd":          amf0.BooleanType(false),
 	}
 
 	log.Printf("New onMetaData")
-	for k, v := range (metaMap) {
+	for k, v := range metaMap {
 		log.Printf("%v = %v\n", k, v)
 	}
 
@@ -409,13 +415,12 @@ nextFrame:
 
 	newKfPositions := make(amf0.StrictArrayType, 0)
 
-	for i := range(kfs) {
-		newKfPositions = append(newKfPositions, amf0.NumberType(uint64(kfs[i].Position) + newOnMetaDataSize - oldOnMetaDataSize))
+	for i := range kfs {
+		newKfPositions = append(newKfPositions, amf0.NumberType(uint64(kfs[i].Position)+newOnMetaDataSize-oldOnMetaDataSize))
 	}
 	keyFrames["filepositions"] = &newKfPositions
 
 	//log.Printf("newKeyFrames: %v", &keyFrames)
-
 
 	newBuf := new(bytes.Buffer)
 	newEnc := amf0.NewEncoder(newBuf)
@@ -430,21 +435,18 @@ nextFrame:
 		log.Fatalf("%s", err)
 	}
 
-
-
 	cFrame := flv.CFrame{
 		Stream: 0,
-		Dts: 0,
-		Type: flv.TAG_TYPE_META,
+		Dts:    0,
+		Type:   flv.TAG_TYPE_META,
 		Flavor: flv.METADATA,
-		Body: newBuf.Bytes(),
+		Body:   newBuf.Bytes(),
 	}
-	newMdFrame := flv.MetaFrame {
+	newMdFrame := flv.MetaFrame{
 		CFrame: cFrame,
 	}
 
 	frWriter.WriteFrame(newMdFrame)
-
 
 	//log.Printf("NewMetaData: %v", newBuf)
 
