@@ -122,25 +122,30 @@ func main() {
 				of = metaOutFile
 			}
 
+			var pW *flv.FlvWriter = nil
 			for wk, wv := range frFW {
 				if wv.FileName == of {
 					if wv.Writer != nil {
 						log.Printf("Write %s to existing %s file %s", k, wk, of)
-						frW[k] = wv.Writer
-						break
-					} else {
-						outF, err := os.Create(of)
-						if err != nil {
-							log.Fatal(err)
-						}
-						log.Printf("Write %s to %s", k, of)
-						frFW[k].Writer = flv.NewWriter(outF)
-						frFW[k].Writer.WriteHeader(header)
-						frW[k] = frFW[k].Writer
+						pW = wv.Writer
 						break
 					}
 				}
 			}
+
+			if pW != nil {
+				frW[k] = pW
+			} else {
+				outF, err := os.Create(of)
+				if err != nil {
+					log.Fatal(err)
+				}
+				log.Printf("Write %s to %s", k, of)
+				frFW[k].Writer = flv.NewWriter(outF)
+				frFW[k].Writer.WriteHeader(header)
+				frW[k] = frFW[k].Writer
+			}
+
 		}
 		for _, v := range frW {
 			defer v.OutFile.Close()
