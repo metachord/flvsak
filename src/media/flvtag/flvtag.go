@@ -131,7 +131,6 @@ func main() {
 						if err != nil {
 							log.Fatal(err)
 						}
-						//defer outF.Close()
 						log.Printf("Write %s to %s", k, of)
 						frFW[k].Writer = flv.NewWriter(outF)
 						frFW[k].Writer.WriteHeader(header)
@@ -140,6 +139,9 @@ func main() {
 					}
 				}
 			}
+		}
+		for _, v := range frW {
+			defer v.OutFile.Close()
 		}
 		writeFrames(frReader, frW)
 	}
