@@ -424,6 +424,7 @@ nextFrame:
 		newKfPositions = append(newKfPositions, amf0.NumberType(uint64(kfs[i].Position)+newOnMetaDataSize-oldOnMetaDataSize))
 	}
 	keyFrames["filepositions"] = &newKfPositions
+	metaMap["filesize"] = amf0.NumberType(uint64(metaMap["filesize"].(amf0.NumberType))+newOnMetaDataSize-oldOnMetaDataSize)
 
 	//log.Printf("newKeyFrames: %v", &keyFrames)
 
