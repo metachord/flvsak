@@ -154,14 +154,33 @@ func main() {
 	}
 }
 
-func warnTs(lastTs, currTs uint32) {
-	log.Printf("WARN: non monotonically increasing dts: %d > %d", lastTs, currTs)
+func warnTs(lastTs, stream, currTs uint32) {
+	log.Printf("WARN: non monotonically increasing dts in stream %d: %d > %d", stream, lastTs, currTs)
 }
 
 func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
-	var lastVTs, lastATs, lastMTs uint32 = 0, 0, 0
-	var lastVTsDiff, lastATsDiff, lastMTsDiff uint32 = 0, 0, 0
-	var shiftVTs, shiftATs, shiftMTs uint32 = 0, 0, 0
+	lastTs := make(map[string]map[uint32]uint32)
+	lastTsDiff := make(map[string]map[uint32]uint32)
+	shiftTs := make(map[string]map[uint32]uint32)
+	for _, c := range []string{"video", "audio", "meta"} {
+		lastTs[c] = make(map[uint32]uint32)
+		lastTsDiff[c] = make(map[uint32]uint32)
+		shiftTs[c] = make(map[uint32]uint32)
+	}
+
+	updateDts := func(c string, s uint32, d uint32) (newDts uint32) {
+		if lastTs[c][s] > d {
+			warnTs(lastTs[c][s], s, d)
+			if fixDts {
+				newDts := lastTs[c][s] + lastTsDiff[c][s]
+				shiftTs[c][s] = newDts - d
+				d += shiftTs[c][s]
+			}
+		}
+		lastTsDiff[c][s] = d - lastTs[c][s]
+		lastTs[c][s] = d
+		return d
+	}
 
 	for {
 		rframe, err := frReader.ReadFrame()
@@ -172,43 +191,19 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 			switch rframe.(type) {
 			case flv.VideoFrame:
 				f := rframe.(flv.VideoFrame)
-				if lastVTs > f.Dts {
-					warnTs(lastVTs, f.Dts)
-					if fixDts {
-						newDts := lastVTs + lastVTsDiff
-						shiftVTs = newDts - f.Dts
-						f.Dts += shiftVTs
-					}
-				}
-				lastVTsDiff = f.Dts - lastVTs
-				lastVTs = f.Dts
-				err = frW["video"].WriteFrame(f)
+				c := "video"
+				f.Dts = updateDts(c, f.Stream(), f.Dts)
+				err = frW[c].WriteFrame(f)
 			case flv.AudioFrame:
 				f := rframe.(flv.AudioFrame)
-				if lastATs > f.Dts {
-					warnTs(lastATs, f.Dts)
-					if fixDts {
-						newDts := lastATs + lastATsDiff
-						shiftATs = newDts - f.Dts
-						f.Dts += shiftATs
-					}
-				}
-				lastATsDiff = f.Dts - lastATs
-				lastATs = f.Dts
-				err = frW["audio"].WriteFrame(f)
+				c := "audio"
+				f.Dts = updateDts(c, f.Stream(), f.Dts)
+				err = frW[c].WriteFrame(f)
 			case flv.MetaFrame:
 				f := rframe.(flv.MetaFrame)
-				if lastMTs > f.Dts {
-					warnTs(lastMTs, f.Dts)
-					if fixDts {
-						newDts := lastMTs + lastMTsDiff
-						shiftMTs = newDts - f.Dts
-						f.Dts += shiftMTs
-					}
-				}
-				lastMTsDiff = f.Dts - lastMTs
-				lastMTs = f.Dts
-				err = frW["meta"].WriteFrame(f)
+				c := "meta"
+				f.Dts = updateDts(c, f.Stream(), f.Dts)
+				err = frW[c].WriteFrame(f)
 			}
 			if err != nil {
 				log.Fatal(err)
@@ -293,6 +288,10 @@ nextFrame:
 				buf := bytes.NewReader(tfr.Body)
 				dec := amf0.NewDecoder(buf)
 
+				hasMetadata = true
+				lastTs = tfr.Dts
+				metadataFrameSize += uint64(tfr.PrevTagSize)
+
 				evName, err := dec.Decode()
 				if err != nil {
 					break nextFrame
@@ -326,9 +325,6 @@ nextFrame:
 				default:
 					log.Printf("Unknown event: %s\n", evName)
 				}
-				hasMetadata = true
-				lastTs = tfr.Dts
-				metadataFrameSize += uint64(tfr.PrevTagSize)
 			}
 		} else {
 			break
