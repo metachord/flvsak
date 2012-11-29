@@ -26,6 +26,8 @@ var streamVideo, streamAudio, streamMeta int
 
 var fixDts bool
 
+var compensateDts bool
+
 func init() {
 
 	flag.StringVar(&inFile, "in", "", "input file")
@@ -43,6 +45,7 @@ func init() {
 	flag.IntVar(&streamMeta, "stream-meta", -1, "store meta stream with this id")
 
 	flag.BoolVar(&fixDts, "fix-dts", false, "fix non monotonically dts")
+	flag.BoolVar(&compensateDts, "compensate-dts", false, "compensate dts for removed streams")
 }
 
 func usage() {
@@ -188,6 +191,9 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 		return d
 	}
 
+	var lastInTs uint32 = 0
+	var compensateTs uint32 = 0
+
 	for {
 		rframe, err := frReader.ReadFrame()
 		if err != nil {
@@ -197,27 +203,45 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 			switch rframe.(type) {
 			case flv.VideoFrame:
 				f := rframe.(flv.VideoFrame)
+				lastInTs = f.Dts
 				if streamVideo != -1 && f.Stream() != uint32(streamVideo) {
+					if compensateDts {
+						compensateTs += (f.Dts - lastInTs)
+					}
+					lastInTs = f.Dts
 					continue
 				}
 				c := "video"
-				f.Dts = updateDts(c, f.Stream(), f.Dts)
+				lastInTs = f.Dts
+				f.Dts = updateDts(c, f.Stream(), f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			case flv.AudioFrame:
 				f := rframe.(flv.AudioFrame)
+				lastInTs = f.Dts
 				if streamAudio != -1 && f.Stream() != uint32(streamAudio) {
+					if compensateDts {
+						compensateTs += (f.Dts - lastInTs)
+					}
+					lastInTs = f.Dts
 					continue
 				}
 				c := "audio"
-				f.Dts = updateDts(c, f.Stream(), f.Dts)
+				lastInTs = f.Dts
+				f.Dts = updateDts(c, f.Stream(), f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			case flv.MetaFrame:
 				f := rframe.(flv.MetaFrame)
+				lastInTs = f.Dts
 				if streamMeta != -1 && f.Stream() != uint32(streamMeta) {
+					if compensateDts {
+						compensateTs += (f.Dts - lastInTs)
+					}
+					lastInTs = f.Dts
 					continue
 				}
 				c := "meta"
-				f.Dts = updateDts(c, f.Stream(), f.Dts)
+				lastInTs = f.Dts
+				f.Dts = updateDts(c, f.Stream(), f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			}
 			if err != nil {
