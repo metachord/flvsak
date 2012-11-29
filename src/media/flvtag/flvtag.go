@@ -22,6 +22,8 @@ var videoOutFile string
 var audioOutFile string
 var metaOutFile string
 
+var streamVideo, streamAudio, streamMeta int
+
 var fixDts bool
 
 func init() {
@@ -35,6 +37,10 @@ func init() {
 	flag.StringVar(&videoOutFile, "out-video", "", "output video file")
 	flag.StringVar(&audioOutFile, "out-audio", "", "output audio file")
 	flag.StringVar(&metaOutFile, "out-meta", "", "output meta file")
+
+	flag.IntVar(&streamVideo, "stream-video", -1, "store video stream with this id")
+	flag.IntVar(&streamAudio, "stream-audio", -1, "store audio stream with this id")
+	flag.IntVar(&streamMeta, "stream-meta", -1, "store meta stream with this id")
 
 	flag.BoolVar(&fixDts, "fix-dts", false, "fix non monotonically dts")
 }
@@ -191,16 +197,25 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 			switch rframe.(type) {
 			case flv.VideoFrame:
 				f := rframe.(flv.VideoFrame)
+				if streamVideo != -1 && f.Stream() != uint32(streamVideo) {
+					continue
+				}
 				c := "video"
 				f.Dts = updateDts(c, f.Stream(), f.Dts)
 				err = frW[c].WriteFrame(f)
 			case flv.AudioFrame:
 				f := rframe.(flv.AudioFrame)
+				if streamAudio != -1 && f.Stream() != uint32(streamAudio) {
+					continue
+				}
 				c := "audio"
 				f.Dts = updateDts(c, f.Stream(), f.Dts)
 				err = frW[c].WriteFrame(f)
 			case flv.MetaFrame:
 				f := rframe.(flv.MetaFrame)
+				if streamMeta != -1 && f.Stream() != uint32(streamMeta) {
+					continue
+				}
 				c := "meta"
 				f.Dts = updateDts(c, f.Stream(), f.Dts)
 				err = frW[c].WriteFrame(f)
