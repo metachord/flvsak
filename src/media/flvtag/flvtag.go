@@ -273,7 +273,7 @@ func writeMetaKeyframes(frReader *flv.FlvReader, frWriter *flv.FlvWriter) (inSta
 	var audioSampleSize uint32 = 0
 	var hasVideo, hasAudio, hasMetadata, hasKeyframes bool = false, false, false, false
 
-	var oldOnMetaDataSize uint64 = 0
+	var oldOnMetaDataSize int64 = 0
 
 	var kfs []kfTimePos
 
@@ -337,7 +337,7 @@ nextFrame:
 				}
 				switch evName {
 				case amf0.StringType("onMetaData"):
-					oldOnMetaDataSize = uint64(tfr.PrevTagSize)
+					oldOnMetaDataSize = int64(tfr.PrevTagSize)
 					md, err := dec.Decode()
 					if err != nil {
 						break nextFrame
@@ -451,17 +451,20 @@ nextFrame:
 		log.Fatalf("%s", err)
 	}
 
-	newOnMetaDataSize := uint64(buf.Len()) + uint64(flv.TAG_HEADER_LENGTH) + uint64(flv.PREV_TAG_SIZE_LENGTH)
+	newOnMetaDataSize := int64(buf.Len()) + int64(flv.TAG_HEADER_LENGTH) + int64(flv.PREV_TAG_SIZE_LENGTH)
 	//log.Printf("newOnMetaDataSize: %v", newOnMetaDataSize)
 	//log.Printf("oldKeyFrames: %v", &keyFrames)
 
 	newKfPositions := make(amf0.StrictArrayType, 0)
 
+	var dataDiff int64 = newOnMetaDataSize-oldOnMetaDataSize
+
 	for i := range kfs {
-		newKfPositions = append(newKfPositions, amf0.NumberType(uint64(kfs[i].Position)+newOnMetaDataSize-oldOnMetaDataSize))
+		newKfPositions = append(newKfPositions, amf0.NumberType(uint64(kfs[i].Position+dataDiff)))
 	}
 	keyFrames["filepositions"] = &newKfPositions
-	metaMap["filesize"] = amf0.NumberType(uint64(metaMap["filesize"].(amf0.NumberType))+newOnMetaDataSize-oldOnMetaDataSize)
+	metaMap["filesize"] = amf0.NumberType(int64(metaMap["filesize"].(amf0.NumberType))+dataDiff)
+	metaMap["datasize"] = amf0.NumberType(int64(metaMap["datasize"].(amf0.NumberType))+dataDiff)
 
 	//log.Printf("newKeyFrames: %v", &keyFrames)
 
