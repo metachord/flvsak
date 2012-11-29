@@ -362,6 +362,8 @@ nextFrame:
 		"filepositions": &kfPositions,
 	}
 
+	hasMetadata = true
+
 	metaMap := amf0.EcmaArrayType{
 		"metadatacreator": amf0.StringType("Flvtag https://github.com/metachord/flvtag"),
 		"metadatadate":    amf0.DateType{TimeZone: 0, Date: metadatadate},
