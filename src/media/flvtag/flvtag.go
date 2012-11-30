@@ -300,7 +300,14 @@ func printMetaData(frReader *flv.FlvReader, mk metaKeys) {
 	} else {
 		for i := range mk {
 			if v, ok := metaMap[amf0.StringType(mk[i])]; ok {
-				fmt.Printf("%s: %v\n", mk[i], v)
+				switch v := v.(type) {
+					case *amf0.ObjectType:
+					for obk, obv := range *v {
+						fmt.Printf("%s[%s]: %v\n", mk[i], obk, obv)
+					}
+					default:
+					fmt.Printf("%s: %v\n", mk[i], v)
+				}
 			}
 		}
 	}
