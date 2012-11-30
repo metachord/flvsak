@@ -9,7 +9,7 @@ Tool for different operations on FLV files
     $ ls -l in.flv
     -rw-r--r-- 1 root root 398312988 2012-11-06 10:58 in.flv
 
-    $ time flvsak -in in.flv -out out.flv
+    $ time flvsak -in in.flv -out out.flv -update-keyframes
 
     real    0m1.803s
     user    0m0.640s
