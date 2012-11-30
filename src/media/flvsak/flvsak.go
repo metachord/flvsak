@@ -19,6 +19,9 @@ var outFile string
 
 var printInfo bool
 
+var flvDump bool
+var minDts, maxDts int
+
 type metaKeys []string
 
 var printInfoKeys metaKeys
@@ -56,6 +59,9 @@ func init() {
 	flag.StringVar(&outFile, "out", "", "output file")
 
 	flag.BoolVar(&printInfo, "info", false, "print file info")
+	flag.BoolVar(&flvDump, "dump", false, "dump frames")
+	flag.IntVar(&minDts, "min-dts", -1, "dump from dts")
+	flag.IntVar(&maxDts, "max-dts", -1, "dump to dts")
 	flag.Var(&printInfoKeys, "info-keys", "print info from metadata for keys (comma separated)")
 	flag.BoolVar(&verbose, "verbose", false, "be verbose")
 
@@ -109,6 +115,8 @@ func main() {
 	if printInfo {
 		printMetaData(frReader, printInfoKeys)
 		return
+	} else if flvDump {
+		createMetaKeyframes(frReader)
 	} else if updateKeyframes {
 		if outFile == "" {
 			log.Fatal("No output file")
@@ -283,7 +291,8 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 }
 
 func printMetaData(frReader *flv.FlvReader, mk metaKeys) {
-	_, metaMap := createMetaKeyframes(frReader)
+	_, metaMapP := createMetaKeyframes(frReader)
+	metaMap := *metaMapP
 	var keys = make(sort.StringSlice, len(metaMap))
 	var i int
 	for k, _ := range metaMap {
@@ -343,7 +352,15 @@ func writeMetaKeyframes(frReader *flv.FlvReader, frWriter *flv.FlvWriter) (inSta
 	return inStart
 }
 
-func createMetaKeyframes(frReader *flv.FlvReader) (inStart int64, metaMap amf0.EcmaArrayType) {
+func frameDump(fr flv.CFrame) {
+	if flvDump {
+		if ((minDts != -1 && fr.Dts > uint32(minDts)) || minDts == -1)	&& ((maxDts != -1 && fr.Dts < uint32(maxDts)) || maxDts == -1) {
+			fmt.Printf("%d\t%d\t%s\n", fr.Dts, fr.Stream, fr.Type)
+		}
+	}
+}
+
+func createMetaKeyframes(frReader *flv.FlvReader) (inStart int64, metaMapP *amf0.EcmaArrayType) {
 
 	fi, err := frReader.InFile.Stat()
 	if err != nil {
@@ -386,6 +403,7 @@ nextFrame:
 				default:
 					videoFrames++
 				}
+				frameDump(tfr.CFrame)
 				hasVideo = true
 				lastVTs = tfr.Dts
 				lastTs = tfr.Dts
@@ -409,6 +427,7 @@ nextFrame:
 				case flv.AUDIO_SIZE_16BIT:
 					audioSampleSize = 16
 				}
+				frameDump(tfr.CFrame)
 				hasAudio = true
 				audioCodec = uint8(tfr.CodecId)
 				audioFrames++
@@ -420,7 +439,7 @@ nextFrame:
 				hasMetadata = true
 				lastTs = tfr.Dts
 				metadataFrameSize += uint64(tfr.PrevTagSize)
-
+				frameDump(tfr.CFrame)
 				evName, err := dec.Decode()
 				if err != nil {
 					break nextFrame
@@ -452,7 +471,6 @@ nextFrame:
 					if height == 0 {
 						height = uint16(((ea)["height"]).(amf0.NumberType))
 					}
-
 				default:
 					log.Printf("Unknown event: %s\n", evName)
 				}
@@ -464,6 +482,10 @@ nextFrame:
 			break
 		}
 	}
+	if flvDump && !printInfo {
+		return 0, nil
+	}
+
 	//log.Printf("KFS: %v", kfs)
 	lastKeyFrameTsF := float32(lastKeyFrameTs) / 1000
 	lastVTsF := float32(lastVTs) / 1000
@@ -495,7 +517,7 @@ nextFrame:
 
 	hasMetadata = true
 
-	metaMap = amf0.EcmaArrayType{
+	metaMap := amf0.EcmaArrayType{
 		"metadatacreator": amf0.StringType("FlvSAK https://github.com/metachord/flvsak"),
 		"metadatadate":    amf0.DateType{TimeZone: 0, Date: metadatadate},
 
@@ -563,5 +585,5 @@ nextFrame:
 	//log.Printf("newKeyFrames: %v", &keyFrames)
 
 	inStart = kfs[0].Position
-	return inStart, metaMap
+	return inStart, &metaMap
 }

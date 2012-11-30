@@ -177,6 +177,14 @@ Specify list of keys from metadata:
     duration: 7092.57080078125
 ```
 
+## Dump frames ##
+
+Dump all frames info to stdout between `min-dts` and `max-dts`:
+
+```
+    $ ./flvsak -in in_file.flv -dump -min-dts 6031657 -max-dts 7092449
+```
+
 ## Split content to different files ##
 
 The following command will split `in_file.flv` to two files: `out.flv` (contains only audio and video only for stream `0`) and `out-meta.flv` (contains all metadata for all streams). Flag `-fix-dts` will fix non monotonically increasing DTS in input file.
