@@ -1,9 +1,12 @@
 # flvsak — the Swiss Army Knife for FLV files #
 
-Tool for different operations on FLV files
+Tool for different operations on FLV files. Initially created to replace extremely slow flvtool2 -U.
 
+## Update keyframes ##
 
-## Benchmark ##
+### Benchmark ###
+
+Update metadata keyframes records:
 
 ```
     $ ls -l in.flv
@@ -23,7 +26,7 @@ Tool for different operations on FLV files
     sys     0m4.900s
 ```
 
-## Description ##
+### Description ###
 
 Add following values to metadata:
 
@@ -127,4 +130,57 @@ Example of metadata:
     hasAudio = true
     videodatarate = 500.20001220703125
 
+```
+
+## Print metadata entries ##
+
+All metadata in alphabetically order:
+
+```
+    $ flvsak -in in_file.flv -info
+    audiocodecid: 2
+    audiodatarate: 44.8125
+    audiodelay: 0
+    audiosamplerate: 22000
+    audiosamplesize: 16
+    audiosize: 4.2513072e+07
+    canSeekToEnd: false
+    cuePoints: &[]
+    datasize: 4.56947287e+08
+    duration: 7092.57080078125
+    filesize: 4.58356172e+08
+    framerate: 13
+    hasAudio: true
+    hasCuePoints: false
+    hasKeyframes: true
+    hasMetadata: true
+    hasVideo: true
+    height: 720
+    keyframes: 0xf840047348
+    lastkeyframetimestamp: 7091.72900390625
+    lasttimestamp: 7092.533203125
+    metadatacreator: FlvSAK https://github.com/metachord/flvsak
+    metadatadate: {0 1.354265321490319e+12}
+    stereo: true
+    videocodecid: 4
+    videodatarate: 466.1925964355469
+    videosize: 4.14403791e+08
+    width: 960
+```
+
+Specify list of keys from metadata:
+
+```
+    $ flvsak -in in_file.flv -info -info-keys height,width,duration
+    height: 720
+    width: 960
+    duration: 7092.57080078125
+```
+
+## Split content to different files ##
+
+The following command will split `in_file.flv` to two files: `out.flv` (contains only audio and video only for stream `0`) and `out-meta.flv` (contains all metadata for all streams). Flag `-fix-dts` will fix non monotonically increasing DTS in input file.
+
+```
+    $ flvsak -in in_file.flv -split-content -out-video out.flv -out-audio out.flv -out-meta out-meta.flv -fix-dts -stream-video 0 -stream-audio 0
 ```
