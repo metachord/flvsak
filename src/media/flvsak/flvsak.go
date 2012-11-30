@@ -354,7 +354,9 @@ func writeMetaKeyframes(frReader *flv.FlvReader, frWriter *flv.FlvWriter) (inSta
 
 func frameDump(fr flv.CFrame) {
 	if flvDump {
-		if ((minDts != -1 && fr.Dts > uint32(minDts)) || minDts == -1)	&& ((maxDts != -1 && fr.Dts < uint32(maxDts)) || maxDts == -1) {
+		minValid := (minDts != -1 && fr.Dts > uint32(minDts)) || minDts == -1
+		maxValid := (maxDts != -1 && fr.Dts < uint32(maxDts)) || maxDts == -1
+		if minValid && maxValid {
 			fmt.Printf("%d\t%d\t%s\n", fr.Dts, fr.Stream, fr.Type)
 		}
 	}
