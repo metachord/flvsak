@@ -1,9 +1,9 @@
 GOPATH := $(shell pwd)
 
-all: media/flvtag
+all: media/flvsak
 
 
-media/flvtag:
+media/flvsak:
 	GOPATH=$(GOPATH) go get $@
 	GOPATH=$(GOPATH) go build $@
 

@@ -496,7 +496,7 @@ nextFrame:
 	hasMetadata = true
 
 	metaMap = amf0.EcmaArrayType{
-		"metadatacreator": amf0.StringType("Flvtag https://github.com/metachord/flvtag"),
+		"metadatacreator": amf0.StringType("FlvSAK https://github.com/metachord/flvsak"),
 		"metadatadate":    amf0.DateType{TimeZone: 0, Date: metadatadate},
 
 		"keyframes": &keyFrames,

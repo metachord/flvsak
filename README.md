@@ -1,6 +1,6 @@
-# flvtag #
+# flvsak — the Swiss Army Knife for FLV files #
 
-Tool for tagging flv files
+Tool for different operations on FLV files
 
 
 ## Benchmark ##
@@ -9,7 +9,7 @@ Tool for tagging flv files
     $ ls -l in.flv
     -rw-r--r-- 1 root root 398312988 2012-11-06 10:58 in.flv
 
-    $ time flvtag -in in.flv -out out.flv
+    $ time flvsak -in in.flv -out out.flv
 
     real    0m1.803s
     user    0m0.640s
@@ -103,7 +103,7 @@ Example of metadata:
     videocodecid = 4
     audiodelay = 0
     width = 960
-    metadatacreator = Flvtag https://github.com/metachord/flvtag
+    metadatacreator = FlvSAK https://github.com/metachord/flvsak
     hasVideo = true
     audiosize = 4.2513072e+07
     canSeekToEnd = false
