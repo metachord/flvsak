@@ -81,7 +81,7 @@ func init() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: %s -in in_file.flv [-update-keyframes -out out_file.flv] [-info] [-info-keys key1,key2,key3] [-verbose] [-fix-dts] [-split-content [-out-video out_video.flv] [-out-audio out_audio.flv] [-out-meta out_meta.flv]] [[-stream-video INT] [-stream-audio INT] [-stream-meta INT] [-compensate-dts]]\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "usage: %s -in in_file.flv [-update-keyframes -out out_file.flv] [-info] [-dump [-min-dts INT] [-max-dts INT]] [-info-keys key1,key2,key3] [-verbose] [-fix-dts] [-split-content [-out-video out_video.flv] [-out-audio out_audio.flv] [-out-meta out_meta.flv]] [[-stream-video INT] [-stream-audio INT] [-stream-meta INT] [-compensate-dts]]\n", os.Args[0])
 	flag.PrintDefaults()
 	os.Exit(2)
 }
