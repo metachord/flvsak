@@ -20,6 +20,7 @@ var outFile string
 var printInfo bool
 
 type metaKeys []string
+
 var printInfoKeys metaKeys
 
 var verbose bool
@@ -38,7 +39,6 @@ var fixDts bool
 
 var compensateDts bool
 
-
 func (i *metaKeys) String() string {
 	return fmt.Sprint(*i)
 }
@@ -49,7 +49,6 @@ func (i *metaKeys) Set(value string) error {
 	}
 	return nil
 }
-
 
 func init() {
 
@@ -67,16 +66,16 @@ func init() {
 	flag.StringVar(&audioOutFile, "out-audio", "", "output audio file")
 	flag.StringVar(&metaOutFile, "out-meta", "", "output meta file")
 
-	flag.IntVar(&streamVideo, "stream-video", -1, "store video stream with this id")
-	flag.IntVar(&streamAudio, "stream-audio", -1, "store audio stream with this id")
-	flag.IntVar(&streamMeta, "stream-meta", -1, "store meta stream with this id")
+	flag.IntVar(&streamVideo, "stream-video", -1, "store video stream with this id (default all)")
+	flag.IntVar(&streamAudio, "stream-audio", -1, "store audio stream with this id (default all)")
+	flag.IntVar(&streamMeta, "stream-meta", -1, "store meta stream with this id (default all)")
 
 	flag.BoolVar(&fixDts, "fix-dts", false, "fix non monotonically dts")
 	flag.BoolVar(&compensateDts, "compensate-dts", false, "compensate dts for removed streams")
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: %s -in in_file.flv [-update-keyframes -out out_file.flv] [-fix-dts] [-split-content [-out-video out_video.flv] [-out-audio out_audio.flv] [-out-meta out_meta.flv]]\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "usage: %s -in in_file.flv [-update-keyframes -out out_file.flv] [-info] [-info-keys key1,key2,key3] [-verbose] [-fix-dts] [-split-content [-out-video out_video.flv] [-out-audio out_audio.flv] [-out-meta out_meta.flv]] [[-stream-video INT] [-stream-audio INT] [-stream-meta INT] [-compensate-dts]]\n", os.Args[0])
 	flag.PrintDefaults()
 	os.Exit(2)
 }
@@ -301,18 +300,17 @@ func printMetaData(frReader *flv.FlvReader, mk metaKeys) {
 		for i := range mk {
 			if v, ok := metaMap[amf0.StringType(mk[i])]; ok {
 				switch v := v.(type) {
-					case *amf0.ObjectType:
+				case *amf0.ObjectType:
 					for obk, obv := range *v {
 						fmt.Printf("%s[%s]: %v\n", mk[i], obk, obv)
 					}
-					default:
+				default:
 					fmt.Printf("%s: %v\n", mk[i], v)
 				}
 			}
 		}
 	}
 }
-
 
 func writeMetaKeyframes(frReader *flv.FlvReader, frWriter *flv.FlvWriter) (inStart int64) {
 	inStart, metaMap := createMetaKeyframes(frReader)
@@ -553,14 +551,14 @@ nextFrame:
 
 	newKfPositions := make(amf0.StrictArrayType, 0)
 
-	var dataDiff int64 = newOnMetaDataSize-oldOnMetaDataSize
+	var dataDiff int64 = newOnMetaDataSize - oldOnMetaDataSize
 
 	for i := range kfs {
 		newKfPositions = append(newKfPositions, amf0.NumberType(uint64(kfs[i].Position+dataDiff)))
 	}
 	keyFrames["filepositions"] = &newKfPositions
-	metaMap["filesize"] = amf0.NumberType(int64(metaMap["filesize"].(amf0.NumberType))+dataDiff)
-	metaMap["datasize"] = amf0.NumberType(int64(metaMap["datasize"].(amf0.NumberType))+dataDiff)
+	metaMap["filesize"] = amf0.NumberType(int64(metaMap["filesize"].(amf0.NumberType)) + dataDiff)
+	metaMap["datasize"] = amf0.NumberType(int64(metaMap["datasize"].(amf0.NumberType)) + dataDiff)
 
 	//log.Printf("newKeyFrames: %v", &keyFrames)
 
