@@ -9,11 +9,17 @@ import (
 	"log"
 	"math"
 	"os"
+	"sort"
 	"time"
 )
 
 var inFile string
 var outFile string
+
+var printInfo bool
+
+var verbose bool
+
 var updateKeyframes bool
 
 var splitContent bool
@@ -32,6 +38,9 @@ func init() {
 
 	flag.StringVar(&inFile, "in", "", "input file")
 	flag.StringVar(&outFile, "out", "", "output file")
+
+	flag.BoolVar(&printInfo, "info", false, "print file info")
+	flag.BoolVar(&verbose, "verbose", false, "be verbose")
 
 	flag.BoolVar(&updateKeyframes, "update-keyframes", false, "update keyframes positions in metatag")
 
@@ -80,7 +89,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if updateKeyframes {
+	if printInfo {
+		printMetaData(frReader)
+		return
+	} else if updateKeyframes {
 		if outFile == "" {
 			log.Fatal("No output file")
 		}
@@ -253,7 +265,54 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 	}
 }
 
+func printMetaData(frReader *flv.FlvReader) {
+	_, metaMap := createMetaKeyframes(frReader)
+	var keys = make(sort.StringSlice, len(metaMap))
+	var i int
+	for k, _ := range metaMap {
+		keys[i] = string(k)
+		i++
+	}
+	sort.Sort(&keys)
+
+	for i := range keys {
+		fmt.Printf("%s: %v\n", keys[i], metaMap[amf0.StringType(keys[i])])
+	}
+}
+
+
 func writeMetaKeyframes(frReader *flv.FlvReader, frWriter *flv.FlvWriter) (inStart int64) {
+	inStart, metaMap := createMetaKeyframes(frReader)
+
+	newBuf := new(bytes.Buffer)
+	newEnc := amf0.NewEncoder(newBuf)
+
+	err := newEnc.Encode(amf0.StringType("onMetaData"))
+	if err != nil {
+		log.Fatalf("%s", err)
+	}
+
+	err = newEnc.Encode(&metaMap)
+	if err != nil {
+		log.Fatalf("%s", err)
+	}
+
+	cFrame := flv.CFrame{
+		Stream: 0,
+		Dts:    0,
+		Type:   flv.TAG_TYPE_META,
+		Flavor: flv.METADATA,
+		Body:   newBuf.Bytes(),
+	}
+	newMdFrame := flv.MetaFrame{
+		CFrame: cFrame,
+	}
+
+	frWriter.WriteFrame(newMdFrame)
+	return inStart
+}
+
+func createMetaKeyframes(frReader *flv.FlvReader) (inStart int64, metaMap amf0.EcmaArrayType) {
 
 	fi, err := frReader.InFile.Stat()
 	if err != nil {
@@ -343,7 +402,6 @@ nextFrame:
 						break nextFrame
 					}
 
-					log.Printf("Old onMetaData")
 					var ea map[amf0.StringType]interface{}
 					switch md := md.(type) {
 					case *amf0.EcmaArrayType:
@@ -351,8 +409,11 @@ nextFrame:
 					case *amf0.ObjectType:
 						ea = *md
 					}
-					for k, v := range ea {
-						log.Printf("%v = %v\n", k, v)
+					if verbose {
+						log.Printf("Old onMetaData")
+						for k, v := range ea {
+							log.Printf("%v = %v\n", k, v)
+						}
 					}
 					if width == 0 {
 						width = uint16(((ea)["width"]).(amf0.NumberType))
@@ -403,7 +464,7 @@ nextFrame:
 
 	hasMetadata = true
 
-	metaMap := amf0.EcmaArrayType{
+	metaMap = amf0.EcmaArrayType{
 		"metadatacreator": amf0.StringType("Flvtag https://github.com/metachord/flvtag"),
 		"metadatadate":    amf0.DateType{TimeZone: 0, Date: metadatadate},
 
@@ -439,9 +500,11 @@ nextFrame:
 		"canSeekToEnd":          amf0.BooleanType(false),
 	}
 
-	log.Printf("New onMetaData")
-	for k, v := range metaMap {
-		log.Printf("%v = %v\n", k, v)
+	if verbose {
+		log.Printf("New onMetaData")
+		for k, v := range metaMap {
+			log.Printf("%v = %v\n", k, v)
+		}
 	}
 
 	buf := new(bytes.Buffer)
@@ -468,34 +531,6 @@ nextFrame:
 
 	//log.Printf("newKeyFrames: %v", &keyFrames)
 
-	newBuf := new(bytes.Buffer)
-	newEnc := amf0.NewEncoder(newBuf)
-
-	err = newEnc.Encode(amf0.StringType("onMetaData"))
-	if err != nil {
-		log.Fatalf("%s", err)
-	}
-
-	err = newEnc.Encode(&metaMap)
-	if err != nil {
-		log.Fatalf("%s", err)
-	}
-
-	cFrame := flv.CFrame{
-		Stream: 0,
-		Dts:    0,
-		Type:   flv.TAG_TYPE_META,
-		Flavor: flv.METADATA,
-		Body:   newBuf.Bytes(),
-	}
-	newMdFrame := flv.MetaFrame{
-		CFrame: cFrame,
-	}
-
-	frWriter.WriteFrame(newMdFrame)
-
-	//log.Printf("NewMetaData: %v", newBuf)
-
 	inStart = kfs[0].Position
-	return inStart
+	return inStart, metaMap
 }
