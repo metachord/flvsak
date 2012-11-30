@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -17,6 +18,9 @@ var inFile string
 var outFile string
 
 var printInfo bool
+
+type metaKeys []string
+var printInfoKeys metaKeys
 
 var verbose bool
 
@@ -34,12 +38,26 @@ var fixDts bool
 
 var compensateDts bool
 
+
+func (i *metaKeys) String() string {
+	return fmt.Sprint(*i)
+}
+
+func (i *metaKeys) Set(value string) error {
+	for _, mk := range strings.Split(value, ",") {
+		*i = append(*i, mk)
+	}
+	return nil
+}
+
+
 func init() {
 
 	flag.StringVar(&inFile, "in", "", "input file")
 	flag.StringVar(&outFile, "out", "", "output file")
 
 	flag.BoolVar(&printInfo, "info", false, "print file info")
+	flag.Var(&printInfoKeys, "info-keys", "print info from metadata for keys (comma separated)")
 	flag.BoolVar(&verbose, "verbose", false, "be verbose")
 
 	flag.BoolVar(&updateKeyframes, "update-keyframes", false, "update keyframes positions in metatag")
@@ -90,7 +108,7 @@ func main() {
 	}
 
 	if printInfo {
-		printMetaData(frReader)
+		printMetaData(frReader, printInfoKeys)
 		return
 	} else if updateKeyframes {
 		if outFile == "" {
@@ -265,7 +283,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 	}
 }
 
-func printMetaData(frReader *flv.FlvReader) {
+func printMetaData(frReader *flv.FlvReader, mk metaKeys) {
 	_, metaMap := createMetaKeyframes(frReader)
 	var keys = make(sort.StringSlice, len(metaMap))
 	var i int
@@ -275,8 +293,16 @@ func printMetaData(frReader *flv.FlvReader) {
 	}
 	sort.Sort(&keys)
 
-	for i := range keys {
-		fmt.Printf("%s: %v\n", keys[i], metaMap[amf0.StringType(keys[i])])
+	if len(mk) == 0 {
+		for i := range keys {
+			fmt.Printf("%s: %v\n", keys[i], metaMap[amf0.StringType(keys[i])])
+		}
+	} else {
+		for i := range mk {
+			if v, ok := metaMap[amf0.StringType(mk[i])]; ok {
+				fmt.Printf("%s: %v\n", mk[i], v)
+			}
+		}
 	}
 }
 
