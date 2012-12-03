@@ -343,7 +343,7 @@ func writeMetaKeyframes(frReader *flv.FlvReader, frWriter *flv.FlvWriter) (inSta
 		log.Fatalf("%s", err)
 	}
 
-	err = newEnc.Encode(&metaMap)
+	err = newEnc.Encode(metaMap)
 	if err != nil {
 		log.Fatalf("%s", err)
 	}
