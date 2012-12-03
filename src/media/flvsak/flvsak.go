@@ -252,7 +252,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 			case flv.VideoFrame:
 				f := rframe.(flv.VideoFrame)
 				lastInTs = f.Dts
-				if streamVideo != -1 && f.Stream() != uint32(streamVideo) {
+				if streamVideo != -1 && f.GetStream() != uint32(streamVideo) {
 					if compensateDts {
 						compensateTs += (f.Dts - lastInTs)
 					}
@@ -261,12 +261,12 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 				}
 				c := "video"
 				lastInTs = f.Dts
-				f.Dts = updateDts(c, f.Stream(), f.Dts) - compensateTs
+				f.Dts = updateDts(c, f.GetStream(), f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			case flv.AudioFrame:
 				f := rframe.(flv.AudioFrame)
 				lastInTs = f.Dts
-				if streamAudio != -1 && f.Stream() != uint32(streamAudio) {
+				if streamAudio != -1 && f.GetStream() != uint32(streamAudio) {
 					if compensateDts {
 						compensateTs += (f.Dts - lastInTs)
 					}
@@ -275,12 +275,12 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 				}
 				c := "audio"
 				lastInTs = f.Dts
-				f.Dts = updateDts(c, f.Stream(), f.Dts) - compensateTs
+				f.Dts = updateDts(c, f.GetStream(), f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			case flv.MetaFrame:
 				f := rframe.(flv.MetaFrame)
 				lastInTs = f.Dts
-				if streamMeta != -1 && f.Stream() != uint32(streamMeta) {
+				if streamMeta != -1 && f.GetStream() != uint32(streamMeta) {
 					if compensateDts {
 						compensateTs += (f.Dts - lastInTs)
 					}
@@ -289,7 +289,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 				}
 				c := "meta"
 				lastInTs = f.Dts
-				f.Dts = updateDts(c, f.Stream(), f.Dts) - compensateTs
+				f.Dts = updateDts(c, f.GetStream(), f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			}
 			if err != nil {
@@ -363,12 +363,12 @@ func writeMetaKeyframes(frReader *flv.FlvReader, frWriter *flv.FlvWriter) (inSta
 	return inStart
 }
 
-func frameDump(fr flv.CFrame) {
+func frameDump(fr flv.Frame) {
 	if flvDump {
-		minValid := (minDts != -1 && fr.Dts > uint32(minDts)) || minDts == -1
-		maxValid := (maxDts != -1 && fr.Dts < uint32(maxDts)) || maxDts == -1
+		minValid := (minDts != -1 && fr.GetDts() > uint32(minDts)) || minDts == -1
+		maxValid := (maxDts != -1 && fr.GetDts() < uint32(maxDts)) || maxDts == -1
 		if minValid && maxValid {
-			fmt.Printf("%d\t%d\t%s\n", fr.Dts, fr.Stream, fr.Type)
+			fmt.Printf("%s\n", fr)
 		}
 	}
 }
@@ -416,7 +416,7 @@ nextFrame:
 				default:
 					videoFrames++
 				}
-				frameDump(tfr.CFrame)
+				frameDump(tfr)
 				hasVideo = true
 				lastVTs = tfr.Dts
 				lastTs = tfr.Dts
@@ -440,7 +440,7 @@ nextFrame:
 				case flv.AUDIO_SIZE_16BIT:
 					audioSampleSize = 16
 				}
-				frameDump(tfr.CFrame)
+				frameDump(tfr)
 				hasAudio = true
 				audioCodec = uint8(tfr.CodecId)
 				audioFrames++
@@ -452,7 +452,7 @@ nextFrame:
 				hasMetadata = true
 				lastTs = tfr.Dts
 				metadataFrameSize += uint64(tfr.PrevTagSize)
-				frameDump(tfr.CFrame)
+				frameDump(tfr)
 				evName, err := dec.Decode()
 				if err != nil {
 					break nextFrame
