@@ -479,10 +479,14 @@ nextFrame:
 						}
 					}
 					if width == 0 {
-						width = uint16(((ea)["width"]).(amf0.NumberType))
+						if v, ok := ((ea)["width"]); ok {
+							width = uint16(v.(amf0.NumberType))
+						}
 					}
 					if height == 0 {
-						height = uint16(((ea)["height"]).(amf0.NumberType))
+						if v, ok := ((ea)["height"]); ok {
+							height = uint16(v.(amf0.NumberType))
+						}
 					}
 				default:
 					log.Printf("Unknown event: %s\n", evName)
