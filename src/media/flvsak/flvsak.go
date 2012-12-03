@@ -252,7 +252,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 			case flv.VideoFrame:
 				f := rframe.(flv.VideoFrame)
 				lastInTs = f.Dts
-				if streamVideo != -1 && f.GetStream() != uint32(streamVideo) {
+				if streamVideo != -1 && f.Stream != uint32(streamVideo) {
 					if compensateDts {
 						compensateTs += (f.Dts - lastInTs)
 					}
@@ -261,12 +261,12 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 				}
 				c := "video"
 				lastInTs = f.Dts
-				f.Dts = updateDts(c, f.GetStream(), f.Dts) - compensateTs
+				f.Dts = updateDts(c, f.Stream, f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			case flv.AudioFrame:
 				f := rframe.(flv.AudioFrame)
 				lastInTs = f.Dts
-				if streamAudio != -1 && f.GetStream() != uint32(streamAudio) {
+				if streamAudio != -1 && f.Stream != uint32(streamAudio) {
 					if compensateDts {
 						compensateTs += (f.Dts - lastInTs)
 					}
@@ -275,12 +275,12 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 				}
 				c := "audio"
 				lastInTs = f.Dts
-				f.Dts = updateDts(c, f.GetStream(), f.Dts) - compensateTs
+				f.Dts = updateDts(c, f.Stream, f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			case flv.MetaFrame:
 				f := rframe.(flv.MetaFrame)
 				lastInTs = f.Dts
-				if streamMeta != -1 && f.GetStream() != uint32(streamMeta) {
+				if streamMeta != -1 && f.Stream != uint32(streamMeta) {
 					if compensateDts {
 						compensateTs += (f.Dts - lastInTs)
 					}
@@ -289,7 +289,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 				}
 				c := "meta"
 				lastInTs = f.Dts
-				f.Dts = updateDts(c, f.GetStream(), f.Dts) - compensateTs
+				f.Dts = updateDts(c, f.Stream, f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			}
 			if err != nil {
