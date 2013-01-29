@@ -22,9 +22,13 @@ var printInfo bool
 var flvDump bool
 var minDts, maxDts int
 
-type metaKeys []string
+// comma separated keys
+type csKeys []string
 
-var printInfoKeys metaKeys
+var printInfoKeys csKeys
+
+var isConcat bool
+var inFiles csKeys
 
 var verbose bool
 
@@ -42,11 +46,11 @@ var fixDts bool
 
 var compensateDts bool
 
-func (i *metaKeys) String() string {
+func (i *csKeys) String() string {
 	return fmt.Sprint(*i)
 }
 
-func (i *metaKeys) Set(value string) error {
+func (i *csKeys) Set(value string) error {
 	for _, mk := range strings.Split(value, ",") {
 		*i = append(*i, mk)
 	}
@@ -71,6 +75,9 @@ func init() {
 	flag.StringVar(&videoOutFile, "out-video", "", "output video file")
 	flag.StringVar(&audioOutFile, "out-audio", "", "output audio file")
 	flag.StringVar(&metaOutFile, "out-meta", "", "output meta file")
+
+	flag.BoolVar(&isConcat, "concat", false, "concat files with the same codec")
+	flag.Var(&inFiles, "ins", "input files")
 
 	flag.IntVar(&streamVideo, "stream-video", -1, "store video stream with this id (default all)")
 	flag.IntVar(&streamAudio, "stream-audio", -1, "store audio stream with this id (default all)")
@@ -106,6 +113,11 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 
+	if isConcat {
+		concatFiles()
+		return
+	}
+
 	if inFile == "" {
 		log.Fatal("No input file")
 	}
@@ -116,9 +128,7 @@ func main() {
 	}
 	defer inF.Close()
 
-	frReader := flv.NewReader(inF)
-
-	header, err := frReader.ReadHeader()
+	frReader, header, err := openFrameReader(inF)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -150,7 +160,7 @@ func main() {
 		frW["audio"] = frWriter
 		frW["meta"] = frWriter
 
-		writeFrames(frReader, frW)
+		writeFrames(frReader, frW, 0)
 	} else if splitContent {
 		if videoOutFile == "" && audioOutFile == "" && metaOutFile == "" {
 			log.Fatal("No any split output file")
@@ -207,7 +217,50 @@ func main() {
 		for _, v := range frW {
 			defer v.OutFile.Close()
 		}
-		writeFrames(frReader, frW)
+		writeFrames(frReader, frW, 0)
+	}
+}
+
+func openFrameReader(inF *os.File) (frReader *flv.FlvReader, header *flv.Header, err error) {
+	frReader = flv.NewReader(inF)
+	header, err = frReader.ReadHeader()
+	return
+}
+
+func concatFiles() {
+	log.Printf("Concat files: %#v", inFiles)
+	if outFile == "" {
+		log.Fatal("No output file")
+	}
+	outF, err := os.Create(outFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+		defer outF.Close()
+	frW := flv.NewWriter(outF)
+	frWout := make(map[string]*flv.FlvWriter)
+	frWout["audio"] = frW
+	frWout["video"] = frW
+	frWout["meta"] = frW
+
+	wh := true					// write header to output after read of first file
+	offset := 0
+	for _, fn := range inFiles {
+		inF, err := os.Open(fn)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer inF.Close()
+		frReader, header, err := openFrameReader(inF)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if wh {
+			frW.WriteHeader(header)
+			wh = false
+		}
+
+		offset = writeFrames(frReader, frWout, offset)
 	}
 }
 
@@ -215,7 +268,7 @@ func warnTs(lastTs, stream, currTs uint32) {
 	log.Printf("WARN: non monotonically increasing dts in stream %d: %d > %d", stream, lastTs, currTs)
 }
 
-func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
+func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter, offset int) (outOffset int) {
 	lastTs := make(map[string]map[uint32]uint32)
 	lastTsDiff := make(map[string]map[uint32]uint32)
 	shiftTs := make(map[string]map[uint32]uint32)
@@ -234,6 +287,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 				d += shiftTs[c][s]
 			}
 		}
+		d = uint32(int(d) + offset)
 		lastTsDiff[c][s] = d - lastTs[c][s]
 		lastTs[c][s] = d
 		return d
@@ -241,7 +295,6 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 
 	var lastInTs uint32 = 0
 	var compensateTs uint32 = 0
-
 	for {
 		rframe, err := frReader.ReadFrame()
 		if err != nil {
@@ -261,6 +314,9 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 				}
 				c := "video"
 				lastInTs = f.Dts
+				if f.Stream == 0 {
+					outOffset = int(lastInTs)
+				}
 				f.Dts = updateDts(c, f.Stream, f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			case flv.AudioFrame:
@@ -275,6 +331,9 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 				}
 				c := "audio"
 				lastInTs = f.Dts
+				if f.Stream == 0 {
+					outOffset = int(lastInTs)
+				}
 				f.Dts = updateDts(c, f.Stream, f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			case flv.MetaFrame:
@@ -289,6 +348,9 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 				}
 				c := "meta"
 				lastInTs = f.Dts
+				if f.Stream == 0 {
+					outOffset = int(lastInTs)
+				}
 				f.Dts = updateDts(c, f.Stream, f.Dts) - compensateTs
 				err = frW[c].WriteFrame(f)
 			}
@@ -299,9 +361,10 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter) {
 			break
 		}
 	}
+	return
 }
 
-func printMetaData(frReader *flv.FlvReader, mk metaKeys) {
+func printMetaData(frReader *flv.FlvReader, mk csKeys) {
 	_, metaMapP := createMetaKeyframes(frReader)
 	metaMap := *metaMapP
 	var keys = make(sort.StringSlice, len(metaMap))
