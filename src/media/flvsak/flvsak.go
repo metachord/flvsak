@@ -44,6 +44,8 @@ var streamVideo, streamAudio, streamMeta int
 
 var fixDts bool
 
+var scaleDts float64 = 1.0
+
 var compensateDts bool
 
 func (i *csKeys) String() string {
@@ -82,6 +84,8 @@ func init() {
 	flag.IntVar(&streamVideo, "stream-video", -1, "store video stream with this id (default all)")
 	flag.IntVar(&streamAudio, "stream-audio", -1, "store audio stream with this id (default all)")
 	flag.IntVar(&streamMeta, "stream-meta", -1, "store meta stream with this id (default all)")
+
+	flag.Float64Var(&scaleDts, "scale-dts", 1.0, "scale dts")
 
 	flag.BoolVar(&fixDts, "fix-dts", false, "fix non monotonically dts")
 	flag.BoolVar(&compensateDts, "compensate-dts", false, "compensate dts for removed streams")
@@ -287,7 +291,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter, offset 
 				d += shiftTs[c][s]
 			}
 		}
-		d = uint32(int(d) + offset)
+		d = uint32(int(float64(d) * scaleDts) + offset)
 		lastTsDiff[c][s] = d - lastTs[c][s]
 		lastTs[c][s] = d
 		return d
