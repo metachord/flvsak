@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -36,11 +37,15 @@ var updateKeyframes bool
 
 var splitContent bool
 
-var videoOutFile string
-var audioOutFile string
-var metaOutFile string
+// comma separated, map tag type to string
+type csTTS map[flv.TagType]string
 
-var streamVideo, streamAudio, streamMeta int
+var outcFiles csTTS
+
+// comma separated, map tag type to int
+type csTTI map[flv.TagType]int
+
+var streams csTTI
 
 var fixDts bool
 
@@ -59,7 +64,75 @@ func (i *csKeys) Set(value string) error {
 	return nil
 }
 
+func (i *csTTS) String() string {
+	out := make([]string, 0)
+	for k, v := range *i {
+		out = append(out, fmt.Sprintf("%s:%s", k, v))
+	}
+	return strings.Join(out, ",")
+}
+
+func (i *csTTS) Set(value string) error {
+	for _, mk := range strings.Split(value, ",") {
+
+		ts := strings.Split(mk, ":")
+		switch ts[0] {
+		case "video":
+			(*i)[flv.TAG_TYPE_VIDEO] = ts[1]
+		case "audio":
+			(*i)[flv.TAG_TYPE_AUDIO] = ts[1]
+		case "meta":
+			(*i)[flv.TAG_TYPE_META] = ts[1]
+		default:
+			log.Fatalf("Bad content type: %s", ts[0])
+		}
+	}
+	return nil
+}
+
+func (i *csTTI) String() string {
+	out := make([]string, 0)
+	for k, v := range *i {
+		var app string
+		if v == -1 {
+			app = "all"
+		} else {
+			app = strconv.Itoa(v)
+		}
+		out = append(out, fmt.Sprintf("%s:%s", k, app))
+	}
+	return strings.Join(out, ",")
+}
+
+func (i *csTTI) Set(value string) error {
+	for _, mk := range strings.Split(value, ",") {
+
+		ts := strings.Split(mk, ":")
+		switch ts[0] {
+		case "video":
+			(*i)[flv.TAG_TYPE_VIDEO], _ = strconv.Atoi(ts[1])
+		case "audio":
+			(*i)[flv.TAG_TYPE_AUDIO], _ = strconv.Atoi(ts[1])
+		case "meta":
+			(*i)[flv.TAG_TYPE_META], _ = strconv.Atoi(ts[1])
+		default:
+			log.Fatalf("Bad content type: %s", ts[0])
+		}
+	}
+	return nil
+}
+
 func init() {
+
+	outcFiles = make(csTTS)
+	outcFiles[flv.TAG_TYPE_VIDEO] = ""
+	outcFiles[flv.TAG_TYPE_AUDIO] = ""
+	outcFiles[flv.TAG_TYPE_META] = ""
+
+	streams = make(csTTI)
+	streams[flv.TAG_TYPE_VIDEO] = -1
+	streams[flv.TAG_TYPE_AUDIO] = -1
+	streams[flv.TAG_TYPE_META] = -1
 
 	flag.StringVar(&inFile, "in", "", "input file")
 	flag.StringVar(&outFile, "out", "", "output file")
@@ -74,16 +147,13 @@ func init() {
 	flag.BoolVar(&updateKeyframes, "update-keyframes", false, "update keyframes positions in metatag")
 
 	flag.BoolVar(&splitContent, "split-content", false, "split content to different files")
-	flag.StringVar(&videoOutFile, "out-video", "", "output video file")
-	flag.StringVar(&audioOutFile, "out-audio", "", "output audio file")
-	flag.StringVar(&metaOutFile, "out-meta", "", "output meta file")
+
+	flag.Var(&outcFiles, "outc", "output frames of declared type to destination")
 
 	flag.BoolVar(&isConcat, "concat", false, "concat files with the same codec")
 	flag.Var(&inFiles, "ins", "input files")
 
-	flag.IntVar(&streamVideo, "stream-video", -1, "store video stream with this id (default all)")
-	flag.IntVar(&streamAudio, "stream-audio", -1, "store audio stream with this id (default all)")
-	flag.IntVar(&streamMeta, "stream-meta", -1, "store meta stream with this id (default all)")
+	flag.Var(&streams, "streams", "store stream of declared type specified this id (default all)")
 
 	flag.Float64Var(&scaleDts, "scale-dts", 1.0, "scale dts")
 
@@ -159,14 +229,14 @@ func main() {
 		inStart := writeMetaKeyframes(frReader, frWriter)
 		inF.Seek(inStart, os.SEEK_SET)
 
-		frW := make(map[string]*flv.FlvWriter)
-		frW["video"] = frWriter
-		frW["audio"] = frWriter
-		frW["meta"] = frWriter
+		frW := make(map[flv.TagType]*flv.FlvWriter)
+		frW[flv.TAG_TYPE_VIDEO] = frWriter
+		frW[flv.TAG_TYPE_AUDIO] = frWriter
+		frW[flv.TAG_TYPE_META] = frWriter
 
 		writeFrames(frReader, frW, 0)
 	} else if splitContent {
-		if videoOutFile == "" && audioOutFile == "" && metaOutFile == "" {
+		if outcFiles[flv.TAG_TYPE_VIDEO] == "" && outcFiles[flv.TAG_TYPE_AUDIO] == "" && outcFiles[flv.TAG_TYPE_META] == "" {
 			log.Fatal("No any split output file")
 		}
 
@@ -175,22 +245,22 @@ func main() {
 			Writer   *flv.FlvWriter
 		}
 
-		frFW := make(map[string]*splitWriter)
-		frFW["video"] = &splitWriter{FileName: videoOutFile, Writer: nil}
-		frFW["audio"] = &splitWriter{FileName: audioOutFile, Writer: nil}
-		frFW["meta"] = &splitWriter{FileName: metaOutFile, Writer: nil}
+		frFW := make(map[flv.TagType]*splitWriter)
+		frFW[flv.TAG_TYPE_VIDEO] = &splitWriter{FileName: outcFiles[flv.TAG_TYPE_VIDEO], Writer: nil}
+		frFW[flv.TAG_TYPE_AUDIO] = &splitWriter{FileName: outcFiles[flv.TAG_TYPE_AUDIO], Writer: nil}
+		frFW[flv.TAG_TYPE_META] = &splitWriter{FileName: outcFiles[flv.TAG_TYPE_META], Writer: nil}
 
-		frW := make(map[string]*flv.FlvWriter)
+		frW := make(map[flv.TagType]*flv.FlvWriter)
 
 		for k, _ := range frFW {
 			var of string
 			switch k {
-			case "video":
-				of = videoOutFile
-			case "audio":
-				of = audioOutFile
-			case "meta":
-				of = metaOutFile
+			case flv.TAG_TYPE_VIDEO:
+				of = outcFiles[flv.TAG_TYPE_VIDEO]
+			case flv.TAG_TYPE_AUDIO:
+				of = outcFiles[flv.TAG_TYPE_AUDIO]
+			case flv.TAG_TYPE_META:
+				of = outcFiles[flv.TAG_TYPE_META]
 			}
 
 			var pW *flv.FlvWriter = nil
@@ -240,14 +310,14 @@ func concatFiles() {
 	if err != nil {
 		log.Fatal(err)
 	}
-		defer outF.Close()
+	defer outF.Close()
 	frW := flv.NewWriter(outF)
-	frWout := make(map[string]*flv.FlvWriter)
-	frWout["audio"] = frW
-	frWout["video"] = frW
-	frWout["meta"] = frW
+	frWout := make(map[flv.TagType]*flv.FlvWriter)
+	frWout[flv.TAG_TYPE_VIDEO] = frW
+	frWout[flv.TAG_TYPE_AUDIO] = frW
+	frWout[flv.TAG_TYPE_META] = frW
 
-	wh := true					// write header to output after read of first file
+	wh := true // write header to output after read of first file
 	offset := 0
 	for _, fn := range inFiles {
 		inF, err := os.Open(fn)
@@ -272,17 +342,20 @@ func warnTs(lastTs, stream, currTs uint32) {
 	log.Printf("WARN: non monotonically increasing dts in stream %d: %d > %d", stream, lastTs, currTs)
 }
 
-func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter, offset int) (outOffset int) {
-	lastTs := make(map[string]map[uint32]uint32)
-	lastTsDiff := make(map[string]map[uint32]uint32)
-	shiftTs := make(map[string]map[uint32]uint32)
-	for _, c := range []string{"video", "audio", "meta"} {
+func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, offset int) (outOffset int) {
+	lastTs := make(map[flv.TagType]map[uint32]uint32)
+	lastTsDiff := make(map[flv.TagType]map[uint32]uint32)
+	shiftTs := make(map[flv.TagType]map[uint32]uint32)
+	for _, c := range []flv.TagType{flv.TAG_TYPE_VIDEO, flv.TAG_TYPE_AUDIO, flv.TAG_TYPE_META} {
 		lastTs[c] = make(map[uint32]uint32)
 		lastTsDiff[c] = make(map[uint32]uint32)
 		shiftTs[c] = make(map[uint32]uint32)
 	}
 
-	updateDts := func(c string, s uint32, d uint32) (newDts uint32) {
+	updateDts := func(cframe flv.Frame) (newDts uint32) {
+		c := cframe.GetType()
+		s := cframe.GetStream()
+		d := cframe.GetDts()
 		if lastTs[c][s] > d {
 			warnTs(lastTs[c][s], s, d)
 			if fixDts {
@@ -291,7 +364,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter, offset 
 				d += shiftTs[c][s]
 			}
 		}
-		d = uint32(int(float64(d) * scaleDts) + offset)
+		d = uint32(int(float64(d)*scaleDts) + offset)
 		lastTsDiff[c][s] = d - lastTs[c][s]
 		lastTs[c][s] = d
 		return d
@@ -305,59 +378,22 @@ func writeFrames(frReader *flv.FlvReader, frW map[string]*flv.FlvWriter, offset 
 			log.Fatal(err)
 		}
 		if rframe != nil {
-			switch rframe.(type) {
-			case flv.VideoFrame:
-				f := rframe.(flv.VideoFrame)
-				lastInTs = f.Dts
-				if streamVideo != -1 && f.Stream != uint32(streamVideo) {
-					if compensateDts {
-						compensateTs += (f.Dts - lastInTs)
-					}
-					lastInTs = f.Dts
-					continue
+			lastInTs = rframe.GetDts()
+			if streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()]) {
+				if compensateDts {
+					compensateTs += (rframe.GetDts() - lastInTs)
 				}
-				c := "video"
-				lastInTs = f.Dts
-				if f.Stream == 0 {
-					outOffset = int(lastInTs)
-				}
-				f.Dts = updateDts(c, f.Stream, f.Dts) - compensateTs
-				err = frW[c].WriteFrame(f)
-			case flv.AudioFrame:
-				f := rframe.(flv.AudioFrame)
-				lastInTs = f.Dts
-				if streamAudio != -1 && f.Stream != uint32(streamAudio) {
-					if compensateDts {
-						compensateTs += (f.Dts - lastInTs)
-					}
-					lastInTs = f.Dts
-					continue
-				}
-				c := "audio"
-				lastInTs = f.Dts
-				if f.Stream == 0 {
-					outOffset = int(lastInTs)
-				}
-				f.Dts = updateDts(c, f.Stream, f.Dts) - compensateTs
-				err = frW[c].WriteFrame(f)
-			case flv.MetaFrame:
-				f := rframe.(flv.MetaFrame)
-				lastInTs = f.Dts
-				if streamMeta != -1 && f.Stream != uint32(streamMeta) {
-					if compensateDts {
-						compensateTs += (f.Dts - lastInTs)
-					}
-					lastInTs = f.Dts
-					continue
-				}
-				c := "meta"
-				lastInTs = f.Dts
-				if f.Stream == 0 {
-					outOffset = int(lastInTs)
-				}
-				f.Dts = updateDts(c, f.Stream, f.Dts) - compensateTs
-				err = frW[c].WriteFrame(f)
+				lastInTs = rframe.GetDts()
+				continue
 			}
+			lastInTs = rframe.GetDts()
+			if rframe.GetStream() == 0 {
+				outOffset = int(lastInTs)
+			}
+			newDts := updateDts(rframe) - compensateTs
+			rframe.SetDts(newDts)
+			err = frW[rframe.GetType()].WriteFrame(rframe)
+
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -449,16 +485,19 @@ func createMetaKeyframes(frReader *flv.FlvReader) (inStart int64, metaMapP *amf0
 
 	filesize := fi.Size()
 
+	frameSize := map[flv.TagType]uint64{flv.TAG_TYPE_VIDEO: 0, flv.TAG_TYPE_AUDIO: 0, flv.TAG_TYPE_META: 0}
+	size := map[flv.TagType]uint64{flv.TAG_TYPE_VIDEO: 0, flv.TAG_TYPE_AUDIO: 0, flv.TAG_TYPE_META: 0}
+	has := map[flv.TagType]bool{flv.TAG_TYPE_VIDEO: false, flv.TAG_TYPE_AUDIO: false, flv.TAG_TYPE_META: false}
+
 	var lastKeyFrameTs, lastVTs, lastTs uint32
 	var width, height uint16
 	var audioRate uint32
-	var videoFrameSize, audioFrameSize, dataFrameSize, metadataFrameSize uint64 = 0, 0, 0, 0
-	var videoSize, audioSize uint64 = 0, 0
+	var dataFrameSize uint64 = 0
 	var videoFrames, audioFrames uint32 = 0, 0
 	var stereo bool = false
 	var videoCodec, audioCodec uint8 = 0, 0
 	var audioSampleSize uint32 = 0
-	var hasVideo, hasAudio, hasMetadata, hasKeyframes bool = false, false, false, false
+	var hasKeyframes bool = false
 
 	var oldOnMetaDataSize int64 = 0
 
@@ -468,9 +507,8 @@ nextFrame:
 	for {
 		frame, err := frReader.ReadFrame()
 		if frame != nil {
-			switch frame.(type) {
+			switch tfr := frame.(type) {
 			case flv.VideoFrame:
-				tfr := frame.(flv.VideoFrame)
 				if (width == 0) || (height == 0) {
 					width, height = tfr.Width, tfr.Height
 					//log.Printf("VideoCodec: %d, Width: %d, Height: %d", tfr.CodecId, tfr.Width, tfr.Height)
@@ -483,21 +521,10 @@ nextFrame:
 				default:
 					videoFrames++
 				}
-				frameDump(tfr)
-				hasVideo = true
 				lastVTs = tfr.Dts
-				lastTs = tfr.Dts
 				videoCodec = uint8(tfr.CodecId)
-				videoFrameSize += uint64(tfr.PrevTagSize)
-				videoSize += uint64(len(tfr.Body))
 			case flv.AudioFrame:
-				tfr := frame.(flv.AudioFrame)
-				//log.Printf("AudioCodec: %d, Rate: %d, BitSize: %d, Channels: %d", tfr.CodecId, tfr.Rate, tfr.BitSize, tfr.Channels)
-				//lastATs = tfr.Dts
-				lastTs = tfr.Dts
 				audioRate = tfr.Rate
-				audioFrameSize += uint64(tfr.PrevTagSize)
-				audioSize += uint64(len(tfr.Body))
 				if tfr.Channels == flv.AUDIO_TYPE_STEREO {
 					stereo = true
 				}
@@ -507,19 +534,12 @@ nextFrame:
 				case flv.AUDIO_SIZE_16BIT:
 					audioSampleSize = 16
 				}
-				frameDump(tfr)
-				hasAudio = true
 				audioCodec = uint8(tfr.CodecId)
 				audioFrames++
 			case flv.MetaFrame:
-				tfr := frame.(flv.MetaFrame)
 				buf := bytes.NewReader(tfr.Body)
 				dec := amf0.NewDecoder(buf)
 
-				hasMetadata = true
-				lastTs = tfr.Dts
-				metadataFrameSize += uint64(tfr.PrevTagSize)
-				frameDump(tfr)
 				evName, err := dec.Decode()
 				if err != nil {
 					break nextFrame
@@ -559,6 +579,11 @@ nextFrame:
 					log.Printf("Unknown event: %s\n", evName)
 				}
 			}
+			frameSize[frame.GetType()] += uint64(frame.GetPrevTagSize())
+			size[frame.GetType()] += uint64(len(*frame.GetBody()))
+			has[frame.GetType()] = true
+			lastTs = frame.GetDts()
+			frameDump(frame)
 		} else {
 			break
 		}
@@ -574,13 +599,13 @@ nextFrame:
 	lastKeyFrameTsF := float32(lastKeyFrameTs) / 1000
 	lastVTsF := float32(lastVTs) / 1000
 	duration := float32(lastTs) / 1000
-	dataFrameSize = videoFrameSize + audioFrameSize + metadataFrameSize
+	dataFrameSize = frameSize[flv.TAG_TYPE_VIDEO] + frameSize[flv.TAG_TYPE_AUDIO] + frameSize[flv.TAG_TYPE_META]
 
 	now := time.Now()
 	metadatadate := float64(now.Unix()*1000) + (float64(now.Nanosecond()) / 1000000)
 
-	videoDataRate := (float32(videoSize) / float32(duration)) * 8 / 1000
-	audioDataRate := (float32(audioSize) / float32(duration)) * 8 / 1000
+	videoDataRate := (float32(size[flv.TAG_TYPE_VIDEO]) / float32(duration)) * 8 / 1000
+	audioDataRate := (float32(size[flv.TAG_TYPE_AUDIO]) / float32(duration)) * 8 / 1000
 
 	frameRate := uint8(math.Floor(float64(videoFrames) / float64(duration)))
 
@@ -599,7 +624,7 @@ nextFrame:
 		"filepositions": &kfPositions,
 	}
 
-	hasMetadata = true
+	has[flv.TAG_TYPE_META] = true
 
 	metaMap := amf0.EcmaArrayType{
 		"metadatacreator": amf0.StringType("FlvSAK https://github.com/metachord/flvsak"),
@@ -607,16 +632,16 @@ nextFrame:
 
 		"keyframes": &keyFrames,
 
-		"hasVideo":     amf0.BooleanType(hasVideo),
-		"hasAudio":     amf0.BooleanType(hasAudio),
-		"hasMetadata":  amf0.BooleanType(hasMetadata),
+		"hasVideo":     amf0.BooleanType(has[flv.TAG_TYPE_VIDEO]),
+		"hasAudio":     amf0.BooleanType(has[flv.TAG_TYPE_AUDIO]),
+		"hasMetadata":  amf0.BooleanType(has[flv.TAG_TYPE_META]),
 		"hasKeyframes": amf0.BooleanType(hasKeyframes),
 		"hasCuePoints": amf0.BooleanType(false),
 
 		"videocodecid":  amf0.NumberType(videoCodec),
 		"width":         amf0.NumberType(width),
 		"height":        amf0.NumberType(height),
-		"videosize":     amf0.NumberType(videoFrameSize),
+		"videosize":     amf0.NumberType(frameSize[flv.TAG_TYPE_VIDEO]),
 		"framerate":     amf0.NumberType(frameRate),
 		"videodatarate": amf0.NumberType(videoDataRate),
 
@@ -625,7 +650,7 @@ nextFrame:
 		"audiosamplesize": amf0.NumberType(audioSampleSize),
 		"audiodelay":      amf0.NumberType(0),
 		"audiodatarate":   amf0.NumberType(audioDataRate),
-		"audiosize":       amf0.NumberType(audioFrameSize),
+		"audiosize":       amf0.NumberType(frameSize[flv.TAG_TYPE_AUDIO]),
 		"audiosamplerate": amf0.NumberType(audioRate),
 
 		"filesize":              amf0.NumberType(filesize),
