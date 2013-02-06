@@ -190,5 +190,5 @@ Dump all frames info to stdout between `min-dts` and `max-dts`:
 The following command will split `in_file.flv` to two files: `out.flv` (contains only audio and video only for stream `0`) and `out-meta.flv` (contains all metadata for all streams). Flag `-fix-dts` will fix non monotonically increasing DTS in input file.
 
 ```
-    $ flvsak -in in_file.flv -split-content -out-video out.flv -out-audio out.flv -out-meta out-meta.flv -fix-dts -stream-video 0 -stream-audio 0
+    $ flvsak -in in_file.flv -split-content -outc video:out.flv,audio:out.flv,meta:out-meta.flv -fix-dts -streams video:0,audio:0
 ```
