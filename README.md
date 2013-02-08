@@ -182,7 +182,7 @@ Specify list of keys from metadata:
 Dump all frames info to stdout between `min-dts` and `max-dts`:
 
 ```
-    $ ./flvsak -in in_file.flv -dump -min-dts 6031657 -max-dts 7092449
+    $ flvsak -in in_file.flv -dump -min-dts 6031657 -max-dts 7092449
 ```
 
 ## Split content to different files ##
