@@ -453,7 +453,7 @@ func writeMetaKeyframes(frReader *flv.FlvReader, frWriter *flv.FlvWriter) (inSta
 		log.Fatalf("%s", err)
 	}
 
-	cFrame := flv.CFrame{
+	cFrame := &flv.CFrame{
 		Stream: 0,
 		Dts:    0,
 		Type:   flv.TAG_TYPE_META,
