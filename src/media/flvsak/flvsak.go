@@ -339,7 +339,9 @@ func concatFiles() {
 }
 
 func warnTs(lastTs, stream, currTs uint32) {
-	log.Printf("WARN: non monotonically increasing dts in stream %d: %d > %d", stream, lastTs, currTs)
+	if verbose {
+		log.Printf("WARN: non monotonically increasing dts in stream %d: %d > %d", stream, lastTs, currTs)
+	}
 }
 
 func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, offset int) (outOffset int) {
