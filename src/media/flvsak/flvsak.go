@@ -387,10 +387,10 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 				continue
 			}
 			lastInTs = rframe.GetDts()
-			if rframe.GetStream() == 0 {
-				outOffset = int(lastInTs)
-			}
 			newDts := updateDts(rframe) - compensateTs
+			if rframe.GetStream() == 0 {
+				outOffset = int(newDts)
+			}
 			rframe.SetDts(newDts)
 			err = frW[rframe.GetType()].WriteFrame(rframe)
 
