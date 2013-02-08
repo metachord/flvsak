@@ -47,6 +47,14 @@ type csTTI map[flv.TagType]int
 
 var streams csTTI
 
+// comma separated ranges
+type csRanges [][2]int
+
+var crop csRanges
+var cropIdx int = 0
+var cropActive bool = false
+var cropWaitKeyframe bool
+
 var fixDts bool
 
 var scaleDts float64 = 1.0
@@ -122,6 +130,25 @@ func (i *csTTI) Set(value string) error {
 	return nil
 }
 
+func (i *csRanges) String() string {
+	out := make([]string, 0)
+	for _, v := range *i {
+		out = append(out, fmt.Sprintf("[%d..%d]", v[0], v[1]))
+	}
+	return strings.Join(out, ",")
+}
+
+func (i *csRanges) Set(value string) error {
+	for _, mk := range strings.Split(value, ",") {
+		ts := strings.Split(mk, "..")
+		start, _ := strconv.Atoi(ts[0])
+		stop, _ := strconv.Atoi(ts[1])
+		(*i) = append((*i), [2]int{start, stop})
+	}
+	return nil
+}
+
+
 func init() {
 
 	outcFiles = make(csTTS)
@@ -133,6 +160,8 @@ func init() {
 	streams[flv.TAG_TYPE_VIDEO] = -1
 	streams[flv.TAG_TYPE_AUDIO] = -1
 	streams[flv.TAG_TYPE_META] = -1
+
+	crop = make(csRanges,0)
 
 	flag.StringVar(&inFile, "in", "", "input file")
 	flag.StringVar(&outFile, "out", "", "output file")
@@ -154,6 +183,9 @@ func init() {
 	flag.Var(&inFiles, "ins", "input files")
 
 	flag.Var(&streams, "streams", "store stream of declared type specified this id (default all)")
+
+	flag.Var(&crop, "crop", "crop specified ranges of dts")
+	flag.BoolVar(&cropWaitKeyframe, "crop-wait-keyframe", false, "wait video keyframe after cropping")
 
 	flag.Float64Var(&scaleDts, "scale-dts", 1.0, "scale dts")
 
@@ -212,7 +244,7 @@ func main() {
 		return
 	} else if flvDump {
 		createMetaKeyframes(frReader)
-	} else if updateKeyframes {
+	} else if updateKeyframes || len(crop) > 0 {
 		if outFile == "" {
 			log.Fatal("No output file")
 		}
@@ -226,8 +258,10 @@ func main() {
 		frWriter := flv.NewWriter(outF)
 		frWriter.WriteHeader(header)
 
-		inStart := writeMetaKeyframes(frReader, frWriter)
-		inF.Seek(inStart, os.SEEK_SET)
+		if updateKeyframes {
+			inStart := writeMetaKeyframes(frReader, frWriter)
+			inF.Seek(inStart, os.SEEK_SET)
+		}
 
 		frW := make(map[flv.TagType]*flv.FlvWriter)
 		frW[flv.TAG_TYPE_VIDEO] = frWriter
@@ -380,9 +414,9 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 			log.Fatal(err)
 		}
 		if rframe != nil {
-			lastInTs = rframe.GetDts()
-			if streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()]) {
-				if compensateDts {
+			isCrop := permitCrop(rframe, lastInTs)
+			if (streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()])) || isCrop {
+				if compensateDts || isCrop {
 					compensateTs += (rframe.GetDts() - lastInTs)
 				}
 				lastInTs = rframe.GetDts()
@@ -401,6 +435,51 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 			}
 		} else {
 			break
+		}
+	}
+	return
+}
+
+func permitCrop(frame flv.Frame, dts uint32) (isCrop bool) {
+	isCrop = false
+	if len(crop) <= cropIdx {
+		return
+	}
+	start, stop := uint32(crop[cropIdx][0]), uint32(crop[cropIdx][1])
+	if start <= dts && dts <= stop {
+		if cropWaitKeyframe && ! cropActive {
+			if isKeyFrame(frame) {
+				cropActive = true
+				isCrop = true
+			}
+		} else {
+			cropActive = true
+			isCrop = true
+		}
+	} else {
+		if cropWaitKeyframe && cropActive {
+			if isKeyFrame(frame) {
+				isCrop = false
+				cropIdx++
+				cropActive = false
+			}
+		} else {
+			if cropActive {
+				cropIdx++
+				cropActive = false
+			}
+			isCrop = false
+		}
+	}
+	return
+}
+
+func isKeyFrame(frame flv.Frame) (res bool) {
+	res = false
+	switch tfr := frame.(type) {
+	case flv.VideoFrame:
+		if tfr.Flavor == flv.KEYFRAME {
+			res = true
 		}
 	}
 	return
