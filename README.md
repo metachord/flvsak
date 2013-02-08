@@ -192,3 +192,11 @@ The following command will split `in_file.flv` to two files: `out.flv` (contains
 ```
     $ flvsak -in in_file.flv -split-content -outc video:out.flv,audio:out.flv,meta:out-meta.flv -fix-dts -streams video:0,audio:0
 ```
+
+## Crop file by DTS ##
+
+Crop parts of file in specified ranges of DTS. Flag `-crop-wait-keyframe` will crop at nearest keyframe.
+
+```
+    $ flvsak -in in_file.flv -out out_crop.flv -crop 1619000..1731000,2753000..2812000 -crop-wait-keyframe
+```
