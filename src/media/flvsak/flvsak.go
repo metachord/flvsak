@@ -31,6 +31,8 @@ var printInfoKeys csKeys
 var isConcat bool
 var inFiles csKeys
 
+var readRecover bool
+
 var verbose bool
 
 var updateKeyframes bool
@@ -148,7 +150,6 @@ func (i *csRanges) Set(value string) error {
 	return nil
 }
 
-
 func init() {
 
 	outcFiles = make(csTTS)
@@ -165,6 +166,8 @@ func init() {
 
 	flag.StringVar(&inFile, "in", "", "input file")
 	flag.StringVar(&outFile, "out", "", "output file")
+
+	flag.BoolVar(&readRecover, "recover", false, "recoverable read")
 
 	flag.BoolVar(&printInfo, "info", false, "print file info")
 	flag.BoolVar(&flvDump, "dump", false, "dump frames")
@@ -409,11 +412,21 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 	var lastInTs uint32 = 0
 	var compensateTs uint32 = 0
 	for {
-		rframe, err := frReader.ReadFrame()
+		var rframe flv.Frame
+		var err error
+		var skipBytes int
+		if readRecover {
+			rframe, err, skipBytes = frReader.ReadFrameRecover()
+		} else {
+			rframe, err = frReader.ReadFrame()
+		}
 		if err != nil {
 			log.Fatal(err)
 		}
 		if rframe != nil {
+			if readRecover && skipBytes > 0 {
+				log.Printf("Recover: skip %d bytes", skipBytes)
+			}
 			isCrop := permitCrop(rframe, lastInTs)
 			if (streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()])) || isCrop {
 				if compensateDts || isCrop {
