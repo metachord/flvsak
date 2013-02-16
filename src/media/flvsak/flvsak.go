@@ -162,7 +162,7 @@ func init() {
 	streams[flv.TAG_TYPE_AUDIO] = -1
 	streams[flv.TAG_TYPE_META] = -1
 
-	crop = make(csRanges,0)
+	crop = make(csRanges, 0)
 
 	flag.StringVar(&inFile, "in", "", "input file")
 	flag.StringVar(&outFile, "out", "", "output file")
@@ -460,7 +460,7 @@ func permitCrop(frame flv.Frame, dts uint32) (isCrop bool) {
 	}
 	start, stop := uint32(crop[cropIdx][0]), uint32(crop[cropIdx][1])
 	if start <= dts && dts <= stop {
-		if cropWaitKeyframe && ! cropActive {
+		if cropWaitKeyframe && !cropActive {
 			if isKeyFrame(frame) {
 				cropActive = true
 				isCrop = true
