@@ -32,6 +32,7 @@ var isConcat bool
 var inFiles csKeys
 
 var readRecover bool
+var maxFrameSize int
 
 var verbose bool
 
@@ -168,6 +169,7 @@ func init() {
 	flag.StringVar(&outFile, "out", "", "output file")
 
 	flag.BoolVar(&readRecover, "recover", false, "recoverable read")
+	flag.IntVar(&maxFrameSize, "max-frame-size", -1, "max recoverable frame size")
 
 	flag.BoolVar(&printInfo, "info", false, "print file info")
 	flag.BoolVar(&flvDump, "dump", false, "dump frames")
@@ -416,7 +418,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 		var err error
 		var skipBytes int
 		if readRecover {
-			rframe, err, skipBytes = frReader.ReadFrameRecover()
+			rframe, err, skipBytes = frReader.ReadFrameRecover(maxFrameSize)
 		} else {
 			rframe, err = frReader.ReadFrame()
 		}
@@ -425,7 +427,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 		}
 		if rframe != nil {
 			if readRecover && skipBytes > 0 {
-				log.Printf("Recover: skip %d bytes", skipBytes)
+				log.Printf("Recover: skip %d bytes, recovered frame length: %d", skipBytes, len(*rframe.GetBody()))
 			}
 			isCrop := permitCrop(rframe, lastInTs)
 			if (streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()])) || isCrop {
