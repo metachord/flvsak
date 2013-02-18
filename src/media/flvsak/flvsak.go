@@ -263,32 +263,7 @@ func main() {
 		return
 	} else if flvDump {
 		createMetaKeyframes(frReader)
-	} else if updateKeyframes {
-		if outFile == "" {
-			log.Fatal("No output file")
-		}
-
-		outF, err := os.Create(outFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer outF.Close()
-
-		frWriter := flv.NewWriter(outF)
-		frWriter.WriteHeader(header)
-
-		if updateKeyframes {
-			inStart := writeMetaKeyframes(frReader, frWriter)
-			inF.Seek(inStart, os.SEEK_SET)
-		}
-
-		frW := make(map[flv.TagType]*flv.FlvWriter)
-		frW[flv.TAG_TYPE_VIDEO] = frWriter
-		frW[flv.TAG_TYPE_AUDIO] = frWriter
-		frW[flv.TAG_TYPE_META] = frWriter
-
-		writeFrames(frReader, frW, 0)
-	} else if splitContent || len(crop) > 0 {
+	} else if splitContent {
 		if outcFiles[flv.TAG_TYPE_VIDEO] == "" && outcFiles[flv.TAG_TYPE_AUDIO] == "" && outcFiles[flv.TAG_TYPE_META] == "" {
 			log.Fatal("No any split output file")
 		}
@@ -344,6 +319,31 @@ func main() {
 		for _, v := range frW {
 			defer v.OutFile.Close()
 		}
+		writeFrames(frReader, frW, 0)
+	} else {
+		if outFile == "" {
+			log.Fatal("No output file")
+		}
+
+		outF, err := os.Create(outFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer outF.Close()
+
+		frWriter := flv.NewWriter(outF)
+		frWriter.WriteHeader(header)
+
+		if updateKeyframes {
+			inStart := writeMetaKeyframes(frReader, frWriter)
+			inF.Seek(inStart, os.SEEK_SET)
+		}
+
+		frW := make(map[flv.TagType]*flv.FlvWriter)
+		frW[flv.TAG_TYPE_VIDEO] = frWriter
+		frW[flv.TAG_TYPE_AUDIO] = frWriter
+		frW[flv.TAG_TYPE_META] = frWriter
+
 		writeFrames(frReader, frW, 0)
 	}
 }
