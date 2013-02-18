@@ -201,6 +201,8 @@ Crop parts of file in specified ranges of DTS. Flag `-crop-wait-keyframe` will c
     $ flvsak -in in_file.flv -out out_crop.flv -crop 1619000..1731000,2753000..2812000 -crop-wait-keyframe
 ```
 
+If crop range is one number, frame with this DTS will be cropped.
+
 ## Broken file recover ##
 
 To recover broken FLV-file, use flag `-recover`. On every broken frame reader will skip byte until valid. If option `-max-frame-size` specified frame with body greater than this value also broken.
