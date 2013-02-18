@@ -203,8 +203,8 @@ Crop parts of file in specified ranges of DTS. Flag `-crop-wait-keyframe` will c
 
 ## Broken file recover ##
 
-To recover broken FLV-file, use flag `-recover`. On every broken frame reader will skip byte until valid
+To recover broken FLV-file, use flag `-recover`. On every broken frame reader will skip byte until valid. If option `-max-frame-size` specified frame with body greater than this value also broken.
 
 ```
-    $ ./flvsak/flvsak -in in_file.flv -split-content -outc video:out.flv,audio:out.flv,meta:out.flv -recover
+    $ ./flvsak/flvsak -in in_file.flv -split-content -outc video:out.flv,audio:out.flv,meta:out.flv -recover -max-frame-size 100000
 ```
