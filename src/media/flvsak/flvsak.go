@@ -144,8 +144,22 @@ func (i *csRanges) String() string {
 func (i *csRanges) Set(value string) error {
 	for _, mk := range strings.Split(value, ",") {
 		ts := strings.Split(mk, "..")
-		start, _ := strconv.Atoi(ts[0])
-		stop, _ := strconv.Atoi(ts[1])
+		var start, stop int
+		var err error
+		start, err = strconv.Atoi(ts[0])
+		if err != nil {
+			log.Fatalf("Bad range %s: %s", value, err)
+		}
+		if len(ts) == 1 {
+			stop = start
+		} else if len(ts) == 2 {
+			stop, err = strconv.Atoi(ts[1])
+			if err != nil {
+				log.Fatal("Bad range %s: %s", value, err)
+			}
+		} else {
+			log.Fatalf("Bad range: %s", mk)
+		}
 		(*i) = append((*i), [2]int{start, stop})
 	}
 	return nil
@@ -249,7 +263,7 @@ func main() {
 		return
 	} else if flvDump {
 		createMetaKeyframes(frReader)
-	} else if updateKeyframes || len(crop) > 0 {
+	} else if updateKeyframes {
 		if outFile == "" {
 			log.Fatal("No output file")
 		}
@@ -274,7 +288,7 @@ func main() {
 		frW[flv.TAG_TYPE_META] = frWriter
 
 		writeFrames(frReader, frW, 0)
-	} else if splitContent {
+	} else if splitContent || len(crop) > 0 {
 		if outcFiles[flv.TAG_TYPE_VIDEO] == "" && outcFiles[flv.TAG_TYPE_AUDIO] == "" && outcFiles[flv.TAG_TYPE_META] == "" {
 			log.Fatal("No any split output file")
 		}
