@@ -443,7 +443,7 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 			if readRecover && skipBytes > 0 {
 				log.Printf("Recover: skip %d bytes, recovered frame length: %d", skipBytes, len(*rframe.GetBody()))
 			}
-			isCrop := permitCrop(rframe, lastInTs)
+			isCrop := permitCrop(rframe)
 			if (streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()])) || isCrop {
 				if compensateDts || isCrop {
 					compensateTs += (rframe.GetDts() - lastInTs)
@@ -469,13 +469,13 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 	return
 }
 
-func permitCrop(frame flv.Frame, dts uint32) (isCrop bool) {
+func permitCrop(frame flv.Frame) (isCrop bool) {
 	isCrop = false
 	if len(crop) <= cropIdx {
 		return
 	}
 	start, stop := uint32(crop[cropIdx][0]), uint32(crop[cropIdx][1])
-	if start <= dts && dts <= stop {
+	if start <= frame.GetDts() && frame.GetDts() <= stop {
 		if cropWaitKeyframe && !cropActive {
 			if isKeyFrame(frame) {
 				cropActive = true
