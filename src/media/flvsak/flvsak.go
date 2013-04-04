@@ -440,8 +440,20 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 			log.Fatal(err)
 		}
 		if rframe != nil {
-			if readRecover && skipBytes > 0 {
-				log.Printf("Recover: skip %d bytes, recovered frame length: %d", skipBytes, len(*rframe.GetBody()))
+			if readRecover {
+				if skipBytes > 0 {
+					log.Printf("Recover: skip %d bytes, recovered frame length: %d", skipBytes, len(*rframe.GetBody()))
+				}
+				if rframe.GetType() == flv.TAG_TYPE_META {
+					metaBody := rframe.GetBody()
+					buf := bytes.NewReader(*metaBody)
+					dec := amf0.NewDecoder(buf)
+					_, err := dec.Decode()
+					if err != nil {
+						log.Printf("Bad metadata at DTS %d", rframe.GetDts())
+						continue
+					}
+				}
 			}
 			isCrop := permitCrop(rframe)
 			if (streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()])) || isCrop {
@@ -652,6 +664,7 @@ nextFrame:
 
 				evName, err := dec.Decode()
 				if err != nil {
+					log.Printf("Err %v at DTS %d", err, tfr.Dts)
 					break nextFrame
 				}
 				switch evName {
