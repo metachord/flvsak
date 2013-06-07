@@ -529,7 +529,6 @@ func permitSkip(frame flv.Frame) (isSkip bool) {
 						if s, ok := ea[amf0.StringType(skipK)]; ok {
 							for _, t := range skipV {
 								if amf0.StringType(t) == s {
-									log.Printf("Remove %v=%v", skipK, s)
 									return true
 								}
 							}
