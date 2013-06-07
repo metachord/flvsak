@@ -28,6 +28,9 @@ type csKeys []string
 
 var printInfoKeys csKeys
 
+type saMeta map[string][]string
+var skipMeta saMeta
+
 var isConcat bool
 var inFiles csKeys
 
@@ -165,6 +168,22 @@ func (i *csRanges) Set(value string) error {
 	return nil
 }
 
+
+
+func (i *saMeta) String() string {
+	return fmt.Sprintf("%v", (*i))
+}
+
+func (i *saMeta) Set(value string) error {
+	fmt.Printf("Value: %v", value)
+	for _, mk := range strings.Split(value, ",") {
+		log.Printf("%v", mk)
+		ts := strings.Split(mk, "=")
+		(*i)[ts[0]] = strings.Split(ts[1], "|")
+	}
+	return nil
+}
+
 func init() {
 
 	outcFiles = make(csTTS)
@@ -178,6 +197,9 @@ func init() {
 	streams[flv.TAG_TYPE_META] = -1
 
 	crop = make(csRanges, 0)
+
+	skipMeta = make(saMeta, 0)
+
 
 	flag.StringVar(&inFile, "in", "", "input file")
 	flag.StringVar(&outFile, "out", "", "output file")
@@ -205,6 +227,7 @@ func init() {
 
 	flag.Var(&crop, "crop", "crop specified ranges of dts")
 	flag.BoolVar(&cropWaitKeyframe, "crop-wait-keyframe", false, "wait video keyframe after cropping")
+	flag.Var(&skipMeta, "skip-meta", "skip specified keys of metadata")
 
 	flag.Float64Var(&scaleDts, "scale-dts", 1.0, "scale dts")
 
@@ -237,6 +260,8 @@ type kfTimePos struct {
 func main() {
 	flag.Usage = usage
 	flag.Parse()
+
+	log.Printf("%v", skipMeta)
 
 	if isConcat {
 		concatFiles()
@@ -456,7 +481,8 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 				}
 			}
 			isCrop := permitCrop(rframe)
-			if (streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()])) || isCrop {
+			isSkip := permitSkip(rframe)
+			if (streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()])) || isCrop || isSkip {
 				if compensateDts || isCrop {
 					compensateTs += (rframe.GetDts() - lastInTs)
 				}
@@ -479,6 +505,41 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 		}
 	}
 	return
+}
+
+func permitSkip(frame flv.Frame) (isSkip bool) {
+	if frame.GetType() == flv.TAG_TYPE_META {
+		metaBody := frame.GetBody()
+		buf := bytes.NewReader(*metaBody)
+		dec := amf0.NewDecoder(buf)
+		evName, err := dec.Decode()
+		if err == nil {
+			switch evName {
+			case amf0.StringType("onMetaData"):
+				md, err := dec.Decode()
+				if err == nil {
+					var ea map[amf0.StringType]interface{}
+					switch md := md.(type) {
+					case *amf0.EcmaArrayType:
+						ea = *md
+					case *amf0.ObjectType:
+						ea = *md
+					}
+					for skipK, skipV := range skipMeta {
+						if s, ok := ea[amf0.StringType(skipK)]; ok {
+							for _, t := range skipV {
+								if amf0.StringType(t) == s {
+									log.Printf("Remove %v=%v", skipK, s)
+									return true
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 func permitCrop(frame flv.Frame) (isCrop bool) {
