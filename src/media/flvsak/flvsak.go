@@ -43,6 +43,10 @@ var updateKeyframes bool
 
 var splitContent bool
 
+var splitStreams bool
+var splitStreamsStopAfter int
+var splitStreamsMinimalDuration int
+
 // comma separated, map tag type to string
 type csTTS map[flv.TagType]string
 
@@ -218,6 +222,10 @@ func init() {
 
 	flag.BoolVar(&splitContent, "split-content", false, "split content to different files")
 
+	flag.BoolVar(&splitStreams, "split-streams", false, "split streams to different files")
+	flag.IntVar(&splitStreamsMinimalDuration, "split-streams-minimal-duration", 5000, "minimal duration of file in milliseconds")
+	flag.IntVar(&splitStreamsStopAfter, "split-streams-stop-after", 5000, "stop file writing ")
+
 	flag.Var(&outcFiles, "outc", "output frames of declared type to destination")
 
 	flag.BoolVar(&isConcat, "concat", false, "concat files with the same codec")
@@ -257,11 +265,27 @@ type kfTimePos struct {
 	Position int64
 }
 
+var commonHeader *flv.Header
+
+type streamWriter struct {
+	fileName string
+	fd *os.File
+	writer *flv.FlvWriter
+	firstDts int
+	lastDts int
+	offsetDts uint32
+}
+
+var streamsWriters map[uint32]*streamWriter
+var splitFileNumber int
+
 func main() {
 	flag.Usage = usage
 	flag.Parse()
 
 	log.Printf("%v", skipMeta)
+
+	defer closeSplitWriters()
 
 	if isConcat {
 		concatFiles()
@@ -282,6 +306,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	commonHeader = header
 
 	if printInfo {
 		printMetaData(frReader, printInfoKeys)
@@ -410,6 +435,7 @@ func concatFiles() {
 		if wh {
 			frW.WriteHeader(header)
 			wh = false
+			commonHeader = header
 		}
 
 		offset = writeFrames(frReader, frWout, offset)
@@ -482,13 +508,21 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 			}
 			isCrop := permitCrop(rframe)
 			isSkip := permitSkip(rframe)
-			if (streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()])) || isCrop || isSkip {
+			isSplitStream := splitStreams && rframe.GetStream() != 0 && rframe.GetType() != flv.TAG_TYPE_META
+			if (streams[rframe.GetType()] != -1 && rframe.GetStream() != uint32(streams[rframe.GetType()])) || isCrop || isSkip || isSplitStream {
 				if compensateDts || isCrop {
 					compensateTs += (rframe.GetDts() - lastInTs)
 				}
 				lastInTs = rframe.GetDts()
+				if splitStreams {
+					err = writeStreamFrame(rframe, outOffset)
+					if err != nil {
+						log.Fatal(err)
+					}
+				}
 				continue
 			}
+			checkSplitWriters(outOffset)
 			lastInTs = rframe.GetDts()
 			newDts := updateDts(rframe) - compensateTs
 			if rframe.GetStream() == 0 {
@@ -496,7 +530,6 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 			}
 			rframe.SetDts(newDts)
 			err = frW[rframe.GetType()].WriteFrame(rframe)
-
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -505,6 +538,63 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 		}
 	}
 	return
+}
+
+func writeStreamFrame(rframe flv.Frame, baseDts int) (err error) {
+	if streamsWriters == nil {
+		streamsWriters = make(map[uint32]*streamWriter)
+	}
+	stream := rframe.GetStream()
+	var stWr *streamWriter
+	if _, ok := streamsWriters[stream]; !ok {
+		log.Printf("Write new stream %d from dts %d", stream, baseDts)
+		splitFileNumber++
+		stWr = new(streamWriter)
+		stWr.fileName = fmt.Sprintf("n-%05d-ts-%d-s-%d.flv", splitFileNumber, baseDts, stream)
+		stWr.fd, err = os.Create(stWr.fileName)
+		if err != nil {
+			log.Fatalf("Cannot open file %s: %s", stWr.fileName, err.Error())
+		}
+		stWr.writer = flv.NewWriter(stWr.fd)
+		stWr.writer.WriteHeader(commonHeader)
+		stWr.firstDts = baseDts
+		stWr.offsetDts = rframe.GetDts()
+		streamsWriters[stream] = stWr
+	} else {
+		stWr = streamsWriters[stream]
+	}
+	rframe.SetDts(rframe.GetDts() - stWr.offsetDts)
+	stWr.writer.WriteFrame(rframe)
+	stWr.lastDts = baseDts
+	return nil
+}
+
+func checkSplitWriters(baseDts int) {
+	keys := make([]uint32, 0)
+	for k, _ := range streamsWriters {
+		keys = append(keys, k)
+	}
+
+	for _, k := range keys {
+		if (baseDts - streamsWriters[k].lastDts) > splitStreamsStopAfter {
+			streamsWriters[k].fd.Close()
+			log.Printf("Close stream %d", k)
+			if (streamsWriters[k].lastDts - streamsWriters[k].firstDts) < splitStreamsMinimalDuration {
+				// Delete short file
+				log.Printf("Remove short file: %s", streamsWriters[k].fileName)
+				os.Remove(streamsWriters[k].fileName)
+			}
+			delete(streamsWriters, k)
+		}
+	}
+}
+
+func closeSplitWriters() {
+	if streamsWriters != nil {
+		for _, v := range streamsWriters {
+			v.fd.Close()
+		}
+	}
 }
 
 func permitSkip(frame flv.Frame) (isSkip bool) {
