@@ -283,8 +283,6 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 
-	log.Printf("%v", skipMeta)
-
 	defer closeSplitWriters()
 
 	if isConcat {
