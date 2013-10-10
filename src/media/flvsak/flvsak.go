@@ -35,7 +35,7 @@ var isConcat bool
 var inFiles csKeys
 
 var readRecover bool
-var maxFrameSize int
+var maxScanSize int
 
 var verbose bool
 
@@ -209,7 +209,7 @@ func init() {
 	flag.StringVar(&outFile, "out", "", "output file")
 
 	flag.BoolVar(&readRecover, "recover", false, "recoverable read")
-	flag.IntVar(&maxFrameSize, "max-frame-size", -1, "max recoverable frame size")
+	flag.IntVar(&maxScanSize, "recover-scan-length", 0, "max interval to look for valid frame during recovery")
 
 	flag.BoolVar(&printInfo, "info", false, "print file info")
 	flag.BoolVar(&flvDump, "dump", false, "dump frames")
@@ -480,30 +480,33 @@ func writeFrames(frReader *flv.FlvReader, frW map[flv.TagType]*flv.FlvWriter, of
 		var rframe flv.Frame
 		var err error
 		var skipBytes int
-		if readRecover {
-			rframe, err, skipBytes = frReader.ReadFrameRecover(maxFrameSize)
-		} else {
-			rframe, err = frReader.ReadFrame()
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-		if rframe != nil {
-			if readRecover {
-				if skipBytes > 0 {
-					log.Printf("Recover: skip %d bytes, recovered frame length: %d", skipBytes, len(*rframe.GetBody()))
-				}
-				if rframe.GetType() == flv.TAG_TYPE_META {
-					metaBody := rframe.GetBody()
-					buf := bytes.NewReader(*metaBody)
-					dec := amf0.NewDecoder(buf)
-					_, err := dec.Decode()
-					if err != nil {
-						log.Printf("Bad metadata at DTS %d", rframe.GetDts())
-						continue
-					}
-				}
+
+		rframe, rerr := frReader.ReadFrame()
+		switch {
+		case rerr != nil && !readRecover:
+			log.Fatal(rerr)
+		case rerr != nil && rerr.IsRecoverable():
+			rframe, err, skipBytes = frReader.Recover(rerr, maxScanSize)
+			if err != nil {
+				log.Fatalf("recovery error: %s", err)
 			}
+			log.Printf("recover: got fine frame after %d bytes", skipBytes)
+			continue
+		}
+
+		if rframe != nil {
+
+				// if rframe.GetType() == flv.TAG_TYPE_META {
+				// 	metaBody := rframe.GetBody()
+				// 	buf := bytes.NewReader(*metaBody)
+				// 	dec := amf0.NewDecoder(buf)
+				// 	_, err := dec.Decode()
+				// 	if err != nil {
+				// 		log.Printf("Bad metadata at DTS %d", rframe.GetDts())
+				// 		continue
+				// 	}
+				// }
+
 			isCrop := permitCrop(rframe)
 			isSkip := permitSkip(rframe)
 			isSplitStream := splitStreams && rframe.GetStream() != 0 && rframe.GetType() != flv.TAG_TYPE_META
@@ -775,9 +778,23 @@ func createMetaKeyframes(frReader *flv.FlvReader) (inStart int64, metaMapP *amf0
 
 nextFrame:
 	for {
-		frame, err := frReader.ReadFrame()
+		frame, rerr := frReader.ReadFrame()
+
+		switch {
+		case rerr != nil && !readRecover:
+			log.Fatal(rerr)
+		case rerr != nil && rerr.IsRecoverable():
+			_, err, skipBytes := frReader.Recover(rerr, maxScanSize)
+			if err != nil {
+				log.Fatalf("recovery error: %s", err)
+			}
+			log.Printf("recover: got fine frame after %d bytes", skipBytes)
+			continue nextFrame
+		}
+
 		if frame != nil {
 			switch tfr := frame.(type) {
+			// TODO: AvcFrame support
 			case flv.VideoFrame:
 				if (width == 0) || (height == 0) {
 					width, height = tfr.Width, tfr.Height
@@ -856,9 +873,6 @@ nextFrame:
 			lastTs = frame.GetDts()
 			frameDump(frame)
 		} else {
-			break
-		}
-		if err != nil {
 			break
 		}
 	}
